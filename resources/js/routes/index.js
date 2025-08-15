@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router-dom';
+import { createBrowserRouter, redirect } from 'react-router-dom';
 
 import Dashboard from '../pages/Dashboard';
 import Categories from '../pages/Categories';
@@ -11,7 +11,7 @@ const router = createBrowserRouter([
     element: <Dashboard />,
     loader: () => {
       if (!localStorage.getItem('authToken')) {
-        return { redirect: '/login' };
+        return redirect('/login');
       }
       return null;
     }
