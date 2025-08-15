@@ -11,10 +11,7 @@ export default defineConfig({
             ],
             refresh: true,
         }),
-        react({
-            // Bật fast refresh
-            fastRefresh: true,
-        }),
+        react(),
     ],
     resolve: {
         alias: {

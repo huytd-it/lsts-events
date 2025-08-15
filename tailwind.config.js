@@ -9,10 +9,16 @@ export default {
         './vendor/laravel/jetstream/**/*.blade.php',
         './storage/framework/views/*.php',
         './resources/views/**/*.blade.php',
+        './resources/**/*.jsx',
+        './resources/**/*.js',
     ],
 
     theme: {
         extend: {
+            colors: {
+                primary: '#9eefe1',
+                secondary: '#1b4664',
+            },
             fontFamily: {
                 sans: ['Figtree', ...defaultTheme.fontFamily.sans],
             },

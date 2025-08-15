@@ -1,0 +1,5122 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+The content has been processed where security check has been disabled.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Security check has been disabled - content may contain sensitive information
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+Controllers/
+  AuthController.php
+  CategoriesController.php
+  EventMediaController.php
+  EventsController.php
+  ExportController.php
+  ImportController.php
+  MediaOptimizeController.php
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="Controllers/AuthController.php">
+<?php
+
+namespace Controllers;
+
+use Core\APIConnect;
+use Core\DB;
+use core\SessionManager;
+use Exception;
+use GuzzleHttp\Client;
+
+class AuthController
+{
+  /**
+   * Login user
+   */
+  function login()
+  {
+    try {
+      $client = new Client();
+
+      $_REQUEST['school_key'] = 1;
+      $response = $client->request('POST', $_ENV['CRM_HOST'] . '/crm/api/v1/login', [
+        'form_params' => $_REQUEST,
+      ]);
+
+      $body = $response->getBody()->getContents();
+      $data = json_decode($body, true);
+      if (!isset($data['email']) || empty($data['email'])) {
+        response([
+          'success' => false,
+          'msg' => 'Login Error',
+          'errors' => [
+            'error' => 'Invalid username or password. Please try again.'
+          ],
+          'data' => $data
+        ], 500);
+        return;
+      }
+
+      // Set session data
+      SessionManager::set('user_email', $data['email']);
+      SessionManager::set('user_name', $data['user_name']);
+      SessionManager::set('user_id', $data['user_id']);
+      SessionManager::set('token', $data['token']);
+      SessionManager::set('is_logged_in', true);
+      SessionManager::set('login_time', time());
+
+      // Log successful login
+      error_log("User logged in: " . $data['email'] . " at " . date('Y-m-d H:i:s'));
+
+      response([
+        'success' => true,
+        'message' => 'Login successful',
+        'data' => $data,
+        'session_info' => [
+          'time_remaining' => SessionManager::getTimeRemaining(),
+          'session_id' => session_id()
+        ],
+        'redirect' => '/admin/events'
+      ]);
+    } catch (\GuzzleHttp\Exception\RequestException $e) {
+      error_log("Login error: " . $e->getMessage());
+
+      // Parse error response
+      $errorMessage = 'Server connection error';
+      if ($e->hasResponse()) {
+        $errorBody = $e->getResponse()->getBody()->getContents();
+        $errorData = json_decode($errorBody, true);
+        if (isset($errorData['message'])) {
+          $errorMessage = $errorData['message'];
+        }
+      }
+
+      response([
+        'success' => false,
+        'msg' => 'LOGIN ERROR',
+        'error' => $errorMessage,
+        'data' => $e->getMessage()
+      ], 500);
+    } catch (Exception $e) {
+      error_log("Login exception: " . $e->getMessage());
+      response([
+        'success' => false,
+        'msg' => 'SYSTEM ERROR',
+        'error' => $e->getMessage()
+      ], 500);
+    }
+  }
+
+  /**
+   * Logout user
+   */
+  function logout()
+  {
+    $userEmail = SessionManager::get('user_email', 'unknown');
+    $reason = $_GET['reason'] ?? $_POST['reason'] ?? 'Manual logout';
+
+    // Log logout
+    error_log("User logging out: $userEmail at " . date('Y-m-d H:i:s') . " - Reason: $reason");
+
+    // Destroy session
+    SessionManager::destroy();
+
+    // Check if this is an AJAX request
+    if (
+      !empty($_SERVER['HTTP_X_REQUESTED_WITH']) &&
+      strtolower($_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest'
+    ) {
+
+      response([
+        'success' => true,
+        'message' => 'Logged out successfully',
+        'reason' => $reason,
+        'redirect' => '/login'
+      ]);
+    } else {
+      // Regular redirect with message
+      $message = $reason !== 'Manual logout' ? "?message=" . urlencode($reason) : '';
+      header('Location: /login' . $message);
+      exit;
+    }
+  }
+
+  /**
+   * Get users (với session check tự động từ middleware)
+   */
+  function getUsers()
+  {
+    try {
+      $client = new Client();
+      $_REQUEST['types'] = ['lsts_hr_staff'];
+      $_REQUEST['length'] = $_REQUEST['length'] ?? 1000;
+
+      $token = SessionManager::get('token');
+      if (!$token) {
+        response([
+          'success' => false,
+          'message' => 'No auth token found',
+          'redirect' => '/logout'
+        ], 401);
+        return;
+      }
+
+      $response = $client->request('GET', $_ENV['CRM_HOST'] . '/crm/api/v1/resource:user/get', [
+        'query' => $_REQUEST,
+        'headers' => [
+          'Authorization' => 'Bearer ' . $token,
+          'Accept' => 'application/json',
+        ],
+        'timeout' => 30
+      ]);
+
+      $body = $response->getBody()->getContents();
+      $data = json_decode($body, true);
+
+      if (!$data) {
+        throw new Exception('Invalid response from CRM API');
+      }
+
+      // Enhance user data with categories
+      foreach ($data as $key => $row) {
+        if (!isset($row['email'])) {
+          continue;
+        }
+
+        try {
+          $row['categories'] = DB::table('categories as C')
+            ->whereRaw('CU.deleted_at is null')
+            ->whereRaw('C.deleted_at is null')
+            ->join('category_user CU', 'C.category_id=CU.category_id')
+            ->where('user_email', $row['email'])
+            ->get();
+        } catch (Exception $e) {
+          error_log("Error getting categories for user {$row['email']}: " . $e->getMessage());
+          $row['categories'] = [];
+        }
+
+        $data[$key] = $row;
+      }
+
+      response([
+        'success' => true,
+        'data' => $data,
+        'total' => count($data),
+        'message' => 'Users retrieved successfully'
+      ]);
+    } catch (\GuzzleHttp\Exception\RequestException $e) {
+      error_log('Get users HTTP error: ' . $e->getMessage());
+
+      // Check if it's an auth error
+      if ($e->hasResponse() && $e->getResponse()->getStatusCode() === 401) {
+        response([
+          'success' => false,
+          'message' => 'Authentication failed',
+          'redirect' => '/logout',
+          'expired' => true
+        ], 401);
+      } else {
+        response([
+          'success' => false,
+          'message' => 'Failed to fetch users from CRM',
+          'error' => $e->getMessage()
+        ], 500);
+      }
+    } catch (Exception $e) {
+      error_log('Get users error: ' . $e->getMessage());
+      response([
+        'success' => false,
+        'message' => 'Internal error while fetching users',
+        'error' => $e->getMessage()
+      ], 500);
+    }
+  }
+
+  /**
+   * Get all users (alias for getUsers for categories management)
+   */
+  function getAllUsers()
+  {
+    return $this->getUsers();
+  }
+
+  /**
+   * Get permissions
+   */
+  function getPermissions()
+  {
+    try {
+      $client = new Client();
+
+      $token = SessionManager::get('token');
+      if (!$token) {
+        response([
+          'success' => false,
+          'message' => 'No auth token found',
+          'redirect' => '/logout'
+        ], 401);
+        return;
+      }
+
+      $response = $client->request('GET', $_ENV['CRM_HOST'] . '/crm/api/v1/get-permission', [
+        'query' => $_REQUEST,
+        'headers' => [
+          'Authorization' => 'Bearer ' . $token,
+          'Accept' => 'application/json',
+        ],
+        'timeout' => 30
+      ]);
+
+      $body = $response->getBody()->getContents();
+      $data = json_decode($body, true);
+
+      if (!$data) {
+        throw new Exception('Invalid response from CRM API');
+      }
+
+      // Store permissions in session
+      SessionManager::set('permissions', $data);
+
+      response([
+        'success' => true,
+        'data' => $data,
+        'message' => 'Permissions retrieved successfully'
+      ]);
+    } catch (\GuzzleHttp\Exception\RequestException $e) {
+      error_log('Get permissions HTTP error: ' . $e->getMessage());
+
+      // Check if it's an auth error
+      if ($e->hasResponse() && $e->getResponse()->getStatusCode() === 401) {
+        response([
+          'success' => false,
+          'message' => 'Authentication failed',
+          'redirect' => '/logout',
+          'expired' => true
+        ], 401);
+      } else {
+        response([
+          'success' => false,
+          'message' => 'Failed to fetch permissions from CRM',
+          'error' => $e->getMessage()
+        ], 500);
+      }
+    } catch (Exception $e) {
+      error_log('Get permissions error: ' . $e->getMessage());
+      response([
+        'success' => false,
+        'message' => 'Internal error while fetching permissions',
+        'error' => $e->getMessage()
+      ], 500);
+    }
+  }
+
+  /**
+   * Check session status (API endpoint)
+   */
+  function checkSession()
+  {
+    try {
+      $isLoggedIn = SessionManager::isLoggedIn();
+      $sessionInfo = SessionManager::getInfo();
+
+      if (!$isLoggedIn) {
+        response([
+          'success' => false,
+          'logged_in' => false,
+          'message' => 'Not logged in',
+          'redirect' => '/logout'
+        ], 401);
+        return;
+      }
+
+      response([
+        'success' => true,
+        'logged_in' => true,
+        'session_info' => $sessionInfo,
+        'user' => [
+          'email' => SessionManager::get('user_email'),
+          'name' => SessionManager::get('user_name'),
+          'id' => SessionManager::get('user_id')
+        ],
+        'permissions' => SessionManager::get('permissions', []),
+        'login_time' => SessionManager::get('login_time')
+      ]);
+    } catch (Exception $e) {
+      error_log('Check session error: ' . $e->getMessage());
+      response([
+        'success' => false,
+        'logged_in' => false,
+        'message' => 'Session check failed',
+        'error' => $e->getMessage(),
+        'redirect' => '/logout'
+      ], 500);
+    }
+  }
+
+  /**
+   * Refresh session (keep alive)
+   */
+  function refreshSession()
+  {
+    try {
+      if (!SessionManager::isLoggedIn()) {
+        response([
+          'success' => false,
+          'message' => 'Not logged in',
+          'redirect' => '/logout',
+          'expired' => true
+        ], 401);
+        return;
+      }
+
+      // Refresh session timeout
+      SessionManager::refresh();
+
+      // Log refresh activity
+      $userEmail = SessionManager::get('user_email', 'unknown');
+      error_log("Session refreshed for user: $userEmail at " . date('Y-m-d H:i:s'));
+
+      response([
+        'success' => true,
+        'message' => 'Session refreshed successfully',
+        'time_remaining' => SessionManager::getTimeRemaining(),
+        'session_id' => session_id()
+      ]);
+    } catch (Exception $e) {
+      error_log('Refresh session error: ' . $e->getMessage());
+      response([
+        'success' => false,
+        'message' => 'Failed to refresh session',
+        'error' => $e->getMessage(),
+        'redirect' => '/logout'
+      ], 500);
+    }
+  }
+
+  /**
+   * Get current user info
+   */
+  function getUserInfo()
+  {
+    try {
+      if (!SessionManager::isLoggedIn()) {
+        response([
+          'success' => false,
+          'message' => 'Not logged in'
+        ], 401);
+        return;
+      }
+
+      $userInfo = [
+        'user_id' => SessionManager::get('user_id'),
+        'user_name' => SessionManager::get('user_name'),
+        'user_email' => SessionManager::get('user_email'),
+        'permissions' => SessionManager::get('permissions', []),
+        'login_time' => SessionManager::get('login_time'),
+        'session_info' => SessionManager::getInfo()
+      ];
+
+      response([
+        'success' => true,
+        'data' => $userInfo,
+        'message' => 'User info retrieved successfully'
+      ]);
+    } catch (Exception $e) {
+      error_log('Get user info error: ' . $e->getMessage());
+      response([
+        'success' => false,
+        'message' => 'Failed to get user info',
+        'error' => $e->getMessage()
+      ], 500);
+    }
+  }
+
+  /**
+   * Update user session data
+   */
+  function updateUserSession()
+  {
+    try {
+      if (!SessionManager::isLoggedIn()) {
+        response([
+          'success' => false,
+          'message' => 'Not logged in'
+        ], 401);
+        return;
+      }
+
+      // Re-fetch permissions to ensure they're up to date
+      $this->getPermissions();
+    } catch (Exception $e) {
+      error_log('Update user session error: ' . $e->getMessage());
+      response([
+        'success' => false,
+        'message' => 'Failed to update session',
+        'error' => $e->getMessage()
+      ], 500);
+    }
+  }
+
+  /**
+   * Validate current session
+   */
+  function validateSession()
+  {
+    try {
+      $isValid = SessionManager::isLoggedIn();
+      $timeRemaining = SessionManager::getTimeRemaining();
+
+      if (!$isValid || $timeRemaining <= 0) {
+        response([
+          'success' => false,
+          'valid' => false,
+          'message' => 'Session invalid or expired',
+          'redirect' => '/logout'
+        ], 401);
+        return;
+      }
+
+      response([
+        'success' => true,
+        'valid' => true,
+        'time_remaining' => $timeRemaining,
+        'message' => 'Session is valid'
+      ]);
+    } catch (Exception $e) {
+      error_log('Validate session error: ' . $e->getMessage());
+      response([
+        'success' => false,
+        'valid' => false,
+        'message' => 'Session validation failed',
+        'error' => $e->getMessage(),
+        'redirect' => '/logout'
+      ], 500);
+    }
+  }
+}
+</file>
+
+<file path="Controllers/CategoriesController.php">
+<?php
+
+namespace Controllers;
+
+use Core\DataTable;
+use Core\DB;
+use core\SessionManager;
+use Core\Validator;
+use Models\Category;
+use Models\CategoryUser;
+use Exception;
+
+class CategoriesController
+{
+  private function getRequestData()
+  {
+    // Handle JSON input
+    $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
+    if (strpos($contentType, 'application/json') !== false) {
+      $jsonInput = file_get_contents('php://input');
+      $decodedData = json_decode($jsonInput, true);
+      if ($decodedData) {
+        return array_merge($_REQUEST, $decodedData);
+      }
+    }
+    return $_REQUEST;
+  }
+  function getAll()
+  {
+    $db = DataTable::table('categories as C')->order('category_id', 'asc');
+    
+    if (requestIsNotEmpty('category_user_email')) {
+      $db->join(
+        '(select * from category_user where deleted_at is null and user_email="' . $_REQUEST['category_user_email'] . '" ) as CU',
+        'CU.category_id=C.category_id',
+        "LEFT JOIN"
+      );
+      $db->selectRaw("C.*, CU.category_user_id");
+    } else if (requestIsNotEmpty('user_email')) {
+      $db->join('(select * from category_user where deleted_at is null ) as CU', 'CU.category_id=C.category_id', "LEFT JOIN");
+      $db->where('user_email', $_REQUEST['user_email']);
+      $db->whereRaw('is_public=1', "OR");
+      $db->selectRaw("C.*, CU.category_user_id");
+    } else {
+      // Add events count and users count for admin view
+      $db->join(
+        '(select category_id, count(*) as events_count from events where deleted_at is null group by category_id) as E',
+        'E.category_id=C.category_id',
+        "LEFT JOIN"
+      );
+      $db->join(
+        '(select category_id, count(distinct user_email) as users_count from category_user where deleted_at is null group by category_id) as U',
+        'U.category_id=C.category_id',
+        "LEFT JOIN"
+      );
+      $db->selectRaw("C.*, COALESCE(E.events_count, 0) as events_count, COALESCE(U.users_count, 0) as users_count");
+    }
+
+    if(requestIsNotEmpty('search')) {
+      $db->whereRaw("category_name LIKE '%{$_REQUEST['search']}%'");
+    }
+
+   
+    $db->whereRaw('C.deleted_at is NULL')->make();
+  }
+  function storeOrUpdate()
+  {
+    Validator::response($_REQUEST, [
+      'category_name' => 'required'
+    ]);
+
+
+
+    if (requestIsNotEmpty('category_id')) {
+      Category::update(['category_id' => $_REQUEST['category_id']], $_REQUEST)->save();
+      $checkName = Category::db()->whereRaw('deleted_at is NULL')
+      ->where('lower(category_name)', strtolower($_REQUEST['category_name']))
+      ->whereRawCheck('category_id <>', $_REQUEST['category_id'])
+      ->first();
+      if($checkName) {
+        response(['msg' => 'Category name is exist'], 400);
+      }
+      response(['msg' => 'Category has been updated successfully']);
+    } else {
+
+      $checkName = Category::db()->whereRaw('deleted_at is NULL')
+      ->where('lower(category_name)', strtolower($_REQUEST['category_name']))
+      ->first();
+      if($checkName) {
+        response(['msg' => 'Category name is exist'], 400);
+      }
+      Category::store($_REQUEST)->save();
+      response(['msg' => 'Category has been created successfully']);
+    }
+  }
+
+  function addCategoryToUser()
+  {
+    Validator::response($_REQUEST, [
+      'user_email' => 'required',
+      'category_id' => 'required',
+      'is_check' => 'required',
+    ]);
+
+    $check = CategoryUser::db()->where([
+      'user_email' => $_REQUEST['user_email'],
+      'category_id' => $_REQUEST['category_id'],
+    ])->first();
+
+    if ($check) {
+      CategoryUser::update(
+        [
+          'category_user_id' => $check['category_user_id'],
+        ],
+        [
+          'user_email' => $_REQUEST['user_email'],
+          'category_id' => $_REQUEST['category_id'],
+          'deleted_at' => $_REQUEST['is_check']  == 0 ? now() : "NULL"
+        ]
+
+      )->save();
+      response(['msg' => 'Category User has been updated successfully']);
+    } else {
+      CategoryUser::store(
+        [
+          'user_email' => $_REQUEST['user_email'],
+          'category_id' => $_REQUEST['category_id'],
+        ]
+
+      )->save();
+
+      response(['msg' => 'Category User has been created successfully']);
+    }
+  }
+  function getCategoryUser()
+  {
+    DataTable::table('category_user')->whereRaw('deleted_at is NULL')->make();
+  }
+
+  function delete()
+  {
+    if (empty($_REQUEST['category_id'])) {
+      response(['success' => false, 'msg' => 'Category ID is required'], 400);
+      return;
+    }
+
+    $categoryId = $_REQUEST['category_id'];
+
+    // Check if category exists
+    $category = Category::db()
+      ->where('category_id', $categoryId)
+      ->whereRaw('deleted_at is NULL')
+      ->first();
+
+    if (!$category) {
+      response(['success' => false, 'msg' => 'Category not found'], 404);
+      return;
+    }
+
+    Category::delete(['category_id' => $categoryId])->save();
+
+    response(['success' => true, 'msg' => 'Category has been deleted successfully']);
+  }
+
+  function getById()
+  {
+    if (empty($_REQUEST['id'])) {
+      response(['success' => false, 'msg' => 'Category ID is required'], 400);
+      return;
+    }
+
+    $category = Category::db()
+      ->where('category_id', $_REQUEST['id'])
+      ->whereRaw('deleted_at is NULL')
+      ->first();
+
+    if (!$category) {
+      response(['success' => false, 'msg' => 'Category not found'], 404);
+      return;
+    }
+
+    response(['success' => true, 'data' => $category]);
+  }
+
+  function create()
+  {
+    $_REQUEST = $this->getRequestData();
+    // Validate required fields
+    if (empty($_REQUEST['category_name'])) {
+      response(['success' => false, 'msg' => 'Category name is required'], 400);
+      return;
+    }
+
+    $categoryName = $_REQUEST['category_name'];
+    $parentId = $_REQUEST['parent_id'] ?? null;
+
+    // If parent_id is provided, validate parent category exists
+    if ($parentId) {
+      $parentCategory = Category::db()
+        ->where('category_id', $parentId)
+        ->whereRaw('deleted_at IS NULL')
+        ->first();
+      
+      if (!$parentCategory) {
+        response(['success' => false, 'msg' => 'Parent category not found'], 404);
+        return;
+      }
+    }
+
+    // Check if category name already exists
+    $checkName = Category::db()->whereRaw('deleted_at is NULL')
+      ->where('lower(category_name)', strtolower($categoryName))
+      ->first();
+    
+    if($checkName) {
+      response(['success' => false, 'msg' => 'Category name already exists'], 400);
+      return;
+    }
+
+    $data = [
+      'category_name' => $categoryName,
+      'category_description' => $_REQUEST['category_description'] ?? null,
+      'is_public' => isset($_REQUEST['is_public']) ? (int)$_REQUEST['is_public'] : 0,
+      'parent_id' => $parentId,
+      'created_at' => date('Y-m-d H:i:s'),
+      'create_by' => $_REQUEST['create_by'] ?? 'No Auth'
+    ];
+
+    Category::store($data)->save();
+    response(['success' => true, 'msg' => 'Category created successfully']);
+  }
+
+  function update()
+  {
+    // Validate required fields
+    if (empty($_REQUEST['category_id'])) {
+      response(['success' => false, 'msg' => 'Category ID is required'], 400);
+      return;
+    }
+
+    if (empty($_REQUEST['category_name'])) {
+      response(['success' => false, 'msg' => 'Category name is required'], 400);
+      return;
+    }
+
+    $categoryId = $_REQUEST['category_id'];
+    $categoryName = $_REQUEST['category_name'];
+
+    // Check if category exists
+    $category = Category::db()
+      ->where('category_id', $categoryId)
+      ->whereRaw('deleted_at is NULL')
+      ->first();
+
+    if (!$category) {
+      response(['success' => false, 'msg' => 'Category not found'], 404);
+      return;
+    }
+
+    // Check if category name already exists (excluding current category)
+    $checkName = Category::db()->whereRaw('deleted_at is NULL')
+      ->where('lower(category_name)', strtolower($categoryName))
+      ->whereRawCheck('category_id <>', $categoryId)
+      ->first();
+    
+    if($checkName) {
+      response(['success' => false, 'msg' => 'Category name already exists'], 400);
+      return;
+    }
+
+    $data = [
+      'category_name' => $categoryName,
+      'category_description' => $_REQUEST['category_description'] ?? null,
+      'is_public' => isset($_REQUEST['is_public']) ? (int)$_REQUEST['is_public'] : 0,
+      'updated_at' => date('Y-m-d H:i:s'),
+      'update_by' => SessionManager::get('user_id') . " - " . SessionManager::get('user_name')
+    ];
+
+    Category::update(['category_id' => $categoryId], $data)->save();
+    response(['success' => true, 'msg' => 'Category updated successfully']);
+  }
+
+  function getStatistics()
+  {
+    try {
+      // Get total categories
+      $totalCategories = Category::db()
+        ->whereRaw('deleted_at is NULL')
+        ->selectRaw("count(1) as total")
+        ->get()[0]['total'];
+
+      // Get public categories
+      $publicCategories = Category::db()
+        ->whereRaw('deleted_at is NULL')
+        ->where('is_public', 1)
+        ->selectRaw("count(1) as total")
+        ->get()[0]['total'];
+
+      // Get private categories
+      $privateCategories = $totalCategories - $publicCategories;
+
+      // Get total assigned users
+      $assignedUsersResult = CategoryUser::db()
+        ->whereRaw('deleted_at is NULL')
+        ->selectRaw('COUNT(DISTINCT user_email) as count')
+        ->first();
+      
+      $assignedUsers = $assignedUsersResult['count'] ?? 0;
+
+      $stats = [
+        'total_categories' => (int)$totalCategories,
+        'public_categories' => (int)$publicCategories,
+        'private_categories' => (int)$privateCategories,
+        'assigned_users' => (int)$assignedUsers
+      ];
+
+      response(['success' => true, 'data' => $stats]);
+    } catch (Exception $e) {
+      error_log("Error getting statistics: " . $e->getMessage());
+      response(['success' => false, 'msg' => 'Error getting statistics'], 500);
+    }
+  }
+
+  function getAssignedUsers()
+  {
+    if (empty($_REQUEST['category_id'])) {
+      response(['success' => false, 'msg' => 'Category ID is required'], 400);
+      return;
+    }
+
+    $users = CategoryUser::db()
+      ->where('category_id', $_REQUEST['category_id'])
+      ->whereRaw('deleted_at is NULL')
+      ->get();
+
+    response(['success' => true, 'data' => $users]);
+  }
+
+  function assignUsers()
+  {
+    $_REQUEST = $this->getRequestData();
+    if (empty($_REQUEST['category_id'])) {
+      response(['success' => false, 'msg' => 'Category ID is required'], 400);
+      return;
+    }
+
+    $categoryId = $_REQUEST['category_id'];
+    $userEmails = $_REQUEST['user_emails'] ?? [];
+
+    try {
+      // First, soft delete all existing assignments for this category
+      CategoryUser::db()
+        ->where('category_id', $categoryId)
+        ->update(['deleted_at' => date('Y-m-d H:i:s')])->save();
+
+      // Then add new assignments
+      if (!empty($userEmails)) {
+        foreach ($userEmails as $userEmail) {
+          // Check if assignment already exists (including soft deleted)
+          $existing = CategoryUser::db()
+            ->where('category_id', $categoryId)
+            ->where('user_email', $userEmail)
+            ->first();
+
+          if ($existing) {
+            // Restore existing assignment
+            CategoryUser::update(
+              ['category_user_id' => $existing['category_user_id']],
+              ['deleted_at' => 'NULL']
+            )->save();
+          } else {
+            // Create new assignment
+            CategoryUser::store([
+              'category_id' => $categoryId,
+              'user_email' => $userEmail
+            ])->save();
+          }
+        }
+      }
+
+      response(['success' => true, 'msg' => 'User assignments updated successfully']);
+    } catch (Exception $e) {
+      error_log("Error assigning users: " . $e->getMessage());
+      response(['success' => false, 'msg' => 'Error updating user assignments'], 500);
+    }
+  }
+
+  function getCategoryTree()
+  {
+    try {
+      // Simple query without complex aggregations to avoid collation and GROUP BY issues
+      $query = "SELECT 
+                  c.category_id,
+                  c.category_name,
+                  c.category_description,
+                  c.is_public,
+                  c.parent_id,
+                  0 as level,
+                  c.category_name as path,
+                  (SELECT COUNT(*) FROM categories child WHERE child.parent_id = c.category_id AND child.deleted_at IS NULL) as has_children,
+                  (CASE WHEN (SELECT COUNT(*) FROM categories child WHERE child.parent_id = c.category_id AND child.deleted_at IS NULL) = 0 THEN 1 ELSE 0 END) as is_leaf,
+                  c.category_id as root_id,
+                  CAST(c.category_id AS CHAR) as ancestors,
+                  (SELECT COUNT(*) FROM events WHERE category_id = c.category_id AND deleted_at IS NULL) as events_count,
+                  (SELECT COUNT(DISTINCT user_email) FROM category_user WHERE category_id = c.category_id AND deleted_at IS NULL) as assigned_users_count,
+                  c.created_at
+                FROM categories c
+                WHERE c.deleted_at IS NULL";
+      
+      // Add filters
+      if (!empty($_REQUEST['exclude_id'])) {
+        $excludeId = (int)$_REQUEST['exclude_id'];
+        $query .= " AND c.category_id != {$excludeId}";
+      }
+      
+      if (!empty($_REQUEST['search'])) {
+        $search = addslashes($_REQUEST['search']);
+        $query .= " AND c.category_name LIKE '%{$search}%'";
+      }
+      
+      $query .= " ORDER BY c.category_name";
+      
+      $categories = DB::fetchAll($query);
+      
+      // Format data for DataTables if needed
+      if (isset($_REQUEST['draw'])) {
+        $totalRecords = count($categories);
+        
+        // Apply pagination if requested
+        $start = isset($_REQUEST['start']) ? (int)$_REQUEST['start'] : 0;
+        $length = isset($_REQUEST['length']) ? (int)$_REQUEST['length'] : 25;
+        
+        if ($length > 0) {
+          $categories = array_slice($categories, $start, $length);
+        }
+        
+        response([
+          'draw' => (int)$_REQUEST['draw'],
+          'recordsTotal' => $totalRecords,
+          'recordsFiltered' => $totalRecords,
+          'data' => $categories
+        ]);
+      } else {
+        response(['success' => true, 'data' => $categories]);
+      }
+      
+    } catch (Exception $e) {
+      error_log("Error getting category tree: " . $e->getMessage());
+      response(['success' => false, 'msg' => 'Error loading categories: ' . $e->getMessage()], 500);
+    }
+  }
+
+  function move()
+  {
+    $_REQUEST = $this->getRequestData();
+    
+    if (empty($_REQUEST['category_id'])) {
+      response(['success' => false, 'msg' => 'Category ID is required'], 400);
+      return;
+    }
+
+    $categoryId = $_REQUEST['category_id'];
+    $newParentId = $_REQUEST['parent_id'] ?? null;
+
+    try {
+      // Check if category exists
+      $category = Category::db()
+        ->where('category_id', $categoryId)
+        ->whereRaw('deleted_at IS NULL')
+        ->first();
+
+      if (!$category) {
+        response(['success' => false, 'msg' => 'Category not found'], 404);
+        return;
+      }
+
+      // If parent_id is provided, check if it exists and prevent circular reference
+      if ($newParentId) {
+        $parentCategory = Category::db()
+          ->where('category_id', $newParentId)
+          ->whereRaw('deleted_at IS NULL')
+          ->first();
+
+        if (!$parentCategory) {
+          response(['success' => false, 'msg' => 'Parent category not found'], 404);
+          return;
+        }
+
+        // Prevent moving a category to itself or its descendants
+        if ($this->wouldCreateCircularReference($categoryId, $newParentId)) {
+          response(['success' => false, 'msg' => 'Cannot move category to itself or its descendants'], 400);
+          return;
+        }
+      }
+
+      // Update the parent_id
+      $updateData = [
+        'parent_id' => $newParentId,
+        'updated_at' => date('Y-m-d H:i:s'),
+        'update_by' => SessionManager::get('user_id') . " - " . SessionManager::get('user_name')
+      ];
+
+      Category::update(['category_id' => $categoryId], $updateData)->save();
+
+      response(['success' => true, 'msg' => 'Category moved successfully']);
+
+    } catch (Exception $e) {
+      error_log("Error moving category: " . $e->getMessage());
+      response(['success' => false, 'msg' => 'Error moving category'], 500);
+    }
+  }
+
+  function validateTree()
+  {
+    try {
+      $issues = [];
+
+      // Skip circular reference check for now to avoid collation issues
+      // This can be implemented with PHP logic instead of complex SQL
+
+      // Check for orphaned categories (parent doesn't exist)
+      $orphanQuery = "
+        SELECT c1.category_id, c1.category_name, c1.parent_id
+        FROM categories c1
+        LEFT JOIN categories c2 ON c1.parent_id = c2.category_id AND c2.deleted_at IS NULL
+        WHERE c1.deleted_at IS NULL 
+        AND c1.parent_id IS NOT NULL 
+        AND c2.category_id IS NULL
+      ";
+
+      $orphans = DB::fetchAll($orphanQuery);
+      if (!empty($orphans)) {
+        $issues[] = [
+          'type' => 'orphaned_categories',
+          'count' => count($orphans),
+          'items' => $orphans
+        ];
+      }
+
+      // Check for excessive depth (> 5 levels)
+      $depthQuery = "
+        WITH RECURSIVE category_depth AS (
+          SELECT category_id, category_name, parent_id, 0 as depth
+          FROM categories 
+          WHERE deleted_at IS NULL AND parent_id IS NULL
+          
+          UNION ALL
+          
+          SELECT c.category_id, c.category_name, c.parent_id, cd.depth + 1
+          FROM categories c
+          INNER JOIN category_depth cd ON c.parent_id = cd.category_id
+          WHERE c.deleted_at IS NULL AND cd.depth < 10
+        )
+        SELECT category_id, category_name, depth
+        FROM category_depth 
+        WHERE depth > 5
+      ";
+
+      $deepCategories = DB::fetchAll($depthQuery);
+      if (!empty($deepCategories)) {
+        $issues[] = [
+          'type' => 'excessive_depth',
+          'count' => count($deepCategories),
+          'items' => $deepCategories
+        ];
+      }
+
+      $isValid = empty($issues);
+      
+      response([
+        'success' => true,
+        'valid' => $isValid,
+        'issues' => $issues,
+        'msg' => $isValid ? 'Category tree is valid' : 'Category tree has issues'
+      ]);
+
+    } catch (Exception $e) {
+      error_log("Error validating tree: " . $e->getMessage());
+      response(['success' => false, 'msg' => 'Error validating category tree'], 500);
+    }
+  }
+
+  function getTreeStatistics()
+  {
+    try {
+      // Get total categories
+      $totalQuery = "SELECT COUNT(*) as total FROM categories WHERE deleted_at IS NULL";
+      $totalResult = DB::fetchAll($totalQuery);
+      $total = $totalResult[0]['total'] ?? 0;
+
+      // Get root categories (no parent)
+      $rootQuery = "SELECT COUNT(*) as total FROM categories WHERE deleted_at IS NULL AND parent_id IS NULL";
+      $rootResult = DB::fetchAll($rootQuery);
+      $rootCount = $rootResult[0]['total'] ?? 0;
+
+      // Get categories with children
+      $parentQuery = "
+        SELECT COUNT(DISTINCT parent_id) as total 
+        FROM categories 
+        WHERE deleted_at IS NULL AND parent_id IS NOT NULL
+      ";
+      $parentResult = DB::fetchAll($parentQuery);
+      $parentCount = $parentResult[0]['total'] ?? 0;
+
+      // Get leaf categories (no children)
+      $leafQuery = "
+        SELECT COUNT(*) as total
+        FROM categories c1
+        LEFT JOIN categories c2 ON c1.category_id = c2.parent_id AND c2.deleted_at IS NULL
+        WHERE c1.deleted_at IS NULL AND c2.category_id IS NULL
+      ";
+      $leafResult = DB::fetchAll($leafQuery);
+      $leafCount = $leafResult[0]['total'] ?? 0;
+
+      // Get maximum depth
+      $maxDepthQuery = "
+        WITH RECURSIVE category_depth AS (
+          SELECT category_id, 0 as depth
+          FROM categories 
+          WHERE deleted_at IS NULL AND parent_id IS NULL
+          
+          UNION ALL
+          
+          SELECT c.category_id, cd.depth + 1
+          FROM categories c
+          INNER JOIN category_depth cd ON c.parent_id = cd.category_id
+          WHERE c.deleted_at IS NULL AND cd.depth < 10
+        )
+        SELECT COALESCE(MAX(depth), 0) as max_depth FROM category_depth
+      ";
+      $maxDepthResult = DB::fetchAll($maxDepthQuery);
+      $maxDepth = $maxDepthResult[0]['max_depth'] ?? 0;
+
+      $stats = [
+        'total_categories' => (int)$total,
+        'root_categories' => (int)$rootCount,
+        'parent_categories' => (int)$parentCount,
+        'leaf_categories' => (int)$leafCount,
+        'max_depth' => (int)$maxDepth
+      ];
+
+      response(['success' => true, 'data' => $stats]);
+
+    } catch (Exception $e) {
+      error_log("Error getting tree statistics: " . $e->getMessage());
+      response(['success' => false, 'msg' => 'Error getting statistics'], 500);
+    }
+  }
+
+  private function wouldCreateCircularReference($categoryId, $newParentId)
+  {
+    try {
+      // Check if newParentId is a descendant of categoryId using simple query
+      $query = "
+        WITH RECURSIVE category_descendants AS (
+          SELECT category_id
+          FROM categories 
+          WHERE parent_id = {$categoryId} AND deleted_at IS NULL
+          
+          UNION ALL
+          
+          SELECT c.category_id
+          FROM categories c
+          INNER JOIN category_descendants cd ON c.parent_id = cd.category_id
+          WHERE c.deleted_at IS NULL
+        )
+        SELECT COUNT(*) as count
+        FROM category_descendants
+        WHERE category_id = {$newParentId}
+      ";
+
+      $result = DB::fetchAll($query);
+      $count = $result[0]['count'] ?? 0;
+      
+      return $count > 0;
+
+    } catch (Exception $e) {
+      error_log("Error checking circular reference: " . $e->getMessage());
+      return true; // Assume circular reference on error for safety
+    }
+  }
+}
+</file>
+
+<file path="Controllers/EventMediaController.php">
+<?php
+
+namespace Controllers;
+
+use Core\DB;
+use Core\Validator;
+use Models\EventMedia;
+
+
+class EventMediaController
+{
+
+
+  function getSlides()
+  {
+    $folderPath = $_ENV['SLIDES_FOLDER'];
+
+    $directory = root($folderPath);
+    $result = [];
+    if (!is_dir($directory)) {
+      return $result;
+    }
+    // Lấy danh sách tất cả các file trong thư mục
+    $files = scandir(($directory));
+
+    $files = array_diff($files, array('.', '..')); // Loại bỏ '.' và '..'
+
+
+    // Duyệt qua các file
+    foreach ($files as $file) {
+
+      $filePath =  $folderPath . "/" . $file;
+      $result[] = $filePath;
+    }
+
+    return response(['data' => $result]);
+  }
+
+  function import()
+  {
+    Validator::response(
+      $_REQUEST,
+      [
+        'media_id' => 'required',
+        'event_id' => 'required',
+      ]
+    );
+
+    $checkExist = DB::table('event_media')
+      ->where('media_id', $_REQUEST['media_id'])
+      ->first();
+
+    if (!$checkExist) {
+      EventMedia::store($_REQUEST)->save();
+      response(['msg' => 'File has been stored successfully']);
+    } else {
+      EventMedia::update(
+        ['media_id' => $checkExist['media_id']],
+        $_REQUEST
+      )->save();
+      response(['msg' => 'File has updated successfully']);
+    }
+  }
+
+  function delete()
+  {
+
+
+    if (!requestIsNotEmpty('media_id') && requestIsNotEmpty('file_path') && requestIsNotEmpty('event_id')) {
+      $media = EventMedia::db()->where([
+        'file_path' => $_REQUEST['file_path'],
+        'event_id' => $_REQUEST['event_id']
+      ])->whereRaw('deleted_at is NULL')->first();
+
+      if ($media) {
+        $_REQUEST['media_id'] = $media['media_id'];
+      }
+    }
+    if (requestIsNotEmpty('file_path') && !requestIsNotEmpty('event_id')) {
+      response(['msg' => 'File has been deleted successfully', 'data' => $_REQUEST]);
+    }
+    Validator::response($_REQUEST, ['media_id' => 'required']);
+
+    EventMedia::delete(['media_id' => $_REQUEST['media_id']])->save();
+
+    response(['msg' => 'File has been deleted successfully', 'data' => $_REQUEST]);
+  }
+  function public()
+  {
+
+    if (!requestIsNotEmpty('media_id') && requestIsNotEmpty('file_path') && requestIsNotEmpty('event_id')) {
+      $media = EventMedia::db()->where([
+        'file_path' => $_REQUEST['file_path'],
+        'event_id' => $_REQUEST['event_id']
+      ])->whereRaw('deleted_at is NULL')->first();
+
+      if ($media) {
+        $_REQUEST['media_id'] = $media['media_id'];
+      }
+    }
+    Validator::response($_REQUEST, ['media_id' => 'required']);
+
+    EventMedia::update(
+      [
+        'media_id' => $_REQUEST['media_id'],
+
+      ],
+      [
+        'is_show' => $_REQUEST['is_show']
+      ]
+    )->save();
+
+    if ($_REQUEST['is_show'] == 1)
+      response(['msg' => 'File has been public successfully', 'data' => $_REQUEST]);
+
+    response(['msg' => 'File has been private successfully', 'data' => $_REQUEST]);
+  }
+}
+</file>
+
+<file path="Controllers/EventsController.php">
+<?php
+
+namespace Controllers;
+
+use Core\Auth;
+use Core\DataTable;
+use Core\DB;
+use core\SessionManager;
+use Core\Validator;
+use DateTime;
+use Models\Event;
+use Exception;
+use Models\EventMedia;
+use Symfony\Component\HttpFoundation\Request;
+use Intervention\Image\ImageManager;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
+use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
+
+
+class EventsController
+{
+  private $directory;
+  private $uploadConfig;
+
+  public function __construct()
+  {
+    $this->directory = $_ENV['EVENTS_FOLDER'];
+
+    // Configuration for resumable uploads
+    $this->uploadConfig = [
+      'upload_dir' => '/assets/uploads/videos/',
+      'temp_dir' => '/assets/uploads/temp/',
+      'max_file_size' => 2 * 1024 * 1024 * 1024, // 2GB
+      'allowed_extensions' => ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv'],
+      'chunk_size' => 1024 * 1024, // 1MB chunks
+      'max_video_count' => 10,
+      'max_image_count' => 50,
+      'min_image_count' => 0
+    ];
+
+    // Create upload directories if they don't exist
+    foreach ([$this->uploadConfig['upload_dir'], $this->uploadConfig['temp_dir']] as $dir) {
+      if (!file_exists(root($dir))) {
+        @mkdir(root($dir), 0777, true);
+      }
+    }
+  }
+
+  function sanitizeFolderName($folderName)
+  {
+    // Loại bỏ các ký tự không hợp lệ trên hầu hết hệ điều hành
+    $invalidChars = array('\\', '/', ':', '*', '?', '"', '<', '>', '|');
+    $sanitized = str_replace($invalidChars, '_', $folderName);
+    $sanitized = preg_replace('/[^a-zA-Z0-9_\s.-]/', '', $sanitized);
+    return trim($sanitized);
+  }
+  function get()
+  {
+
+    if (requestIsNotEmpty('id')) {
+      $db  = DB::table('events')->where('id', $_REQUEST['id'])->first();
+
+      $dbMedia = DB::table('event_media')->whereRaw('deleted_at is NULL')->order("`order`")
+        ->where('event_id', $_REQUEST['id']);
+
+      if (requestIsNotEmpty('is_show')) {
+        $dbMedia->where('is_show', $_REQUEST['is_show']);
+      }
+
+      $db['media'] = $dbMedia->get();
+      response($db);
+    } else {
+      response([]);
+    }
+  }
+  function getAll()
+  {
+
+
+
+    $db = DataTable::table('events')
+      ->order('event_date', 'desc')
+      ->join("categories", "events.category_id=categories.category_id")
+      ->whereRaw("events.deleted_at is NULL");
+
+    if (\requestIsNotEmpty('search')) {
+      $db->whereRaw("event_name LIKE '%{$_REQUEST['search']}%'");
+    }
+
+    if (requestIsNotEmpty('start_date')) {
+      $db->whereRaw("DATE(event_date) >= DATE('{$_REQUEST['start_date']}')");
+    }
+    if (requestIsNotEmpty('end_date')) {
+      $db->whereRaw("DATE(event_date) <= DATE('{$_REQUEST['end_date']}')");
+    }
+
+    if (requestIsNotEmpty('category_id')) {
+      $db->whereRawCheck("categories.category_id = ", "{$_REQUEST['category_id']}");
+    }
+    if (requestIsNotEmpty('is_big_event')) {
+      $db->whereRawCheck("events.is_big_event = ", "{$_REQUEST['is_big_event']}");
+    }
+    if (requestIsNotEmpty('create_by')) {
+      $db->whereRawCheck("events.create_by = ", "{$_REQUEST['create_by']}");
+    }
+    if (requestIsNotEmpty('update_by')) {
+      $db->whereRawCheck("events.update_by = ", "{$_REQUEST['update_by']}");
+    }
+
+    if (requestIsNotEmpty('is_admin')) {
+      if (!Auth::checkPermission('Event_Admin')) {
+        $db->where("events.create_by", Auth::name());
+      }
+    }
+
+
+    $db->selectRaw("events.*, categories.category_name");
+    $data = [];
+    foreach ($db->data()->getData() as $event) {
+
+      $event['media']  ??= DB::table('event_media')
+        ->where("is_show", "=", 1)
+        ->where('event_id', $event['id'])->order("`order`")
+        ->whereRaw('deleted_at is NULL')->get();
+      // $event['one_drive'] =   $this->getDirectoryInfo(root($event['path']), $event['path']);
+      $data[] = $event;
+    }
+
+    $db->setData($data);
+
+    $db->make();
+  }
+
+  function getYears()
+  {
+    $directory =  root($_ENV['EVENTS_FOLDER']); // Đường dẫn thư mục bạn muốn lấy danh sách
+    $folders = [];
+    // Lấy danh sách tất cả các tệp và thư mục trong thư mục chỉ định
+    $items = scandir($directory);
+    // Lọc ra chỉ thư mục
+    foreach ($items as $item) {
+      if ($item !== '.' && $item !== '..' && is_dir($directory . '/' . $item)) {
+        $folders[] = $item;
+      }
+    }
+
+    return response($folders);
+  }
+
+  private function usePowerShellRemove($folderPath)
+  {
+
+    // Đường dẫn tới file PowerShell
+    $psScript = root('/delete_folder.ps1');
+
+    // Thư mục cần xóa
+    // Lệnh gọi PowerShell
+    $command = "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$psScript\" -folderPath \"$folderPath\" 2>&1";
+
+    // Chạy lệnh PowerShell từ PHP
+    $output = shell_exec($command);
+
+    // Kiểm tra kết quả
+    // echo nl2br($output);
+  }
+
+  function createNewEventFolder($data)
+  {
+    $directory =  $_ENV['EVENTS_FOLDER'];
+    $newEventDate = new DateTime($data['event_date']);
+    $newYearFolder = "/" . $newEventDate->format('Y');
+    $newEventNameFolder = "/" . $newEventDate->format('Y-m-d') . " " . $this->sanitizeFolderName($data['event_name']);
+    $path  = $directory . $newYearFolder . $newEventNameFolder;
+    if (!file_exists(root($path))) {
+      mkdir(root($path), 0777, true);
+    }
+    return $path;
+  }
+
+
+  function removeFolder()
+  {
+    $this->removeEmptyFolders(root($_ENV['EVENTS_FOLDER']));
+  }
+  function removeEmptyFolders($folderPath)
+  {
+    // Mở thư mục
+    $folderPath  = ($folderPath);
+    $items = scandir($folderPath);
+
+    // Loại bỏ '.' và '..'
+    $items = array_diff($items, ['.', '..']);
+
+
+    // Nếu thư mục trống, trả về true (xóa thư mục)
+    if (empty($items)) {
+      if (is_dir($folderPath)) {
+        $this->usePowerShellRemove($folderPath); // Xóa thư mục
+
+        //echo "Đã xóa thư mục rỗng: $folderPath\n";
+        return true;
+      }
+    }
+
+    // Duyệt qua tất cả các phần tử trong thư mục
+    foreach ($items as $item) {
+
+      $itemPath = $folderPath . "/" . $item;
+
+      // Nếu là thư mục, gọi lại hàm để kiểm tra thư mục con
+      if (is_dir($itemPath)) {
+        $this->removeEmptyFolders($itemPath);
+      }
+    }
+
+    // Kiểm tra lại thư mục sau khi duyệt qua các thư mục con
+    $items = array_diff(scandir($folderPath), ['.', '..']);
+
+    if (empty($items)) {
+
+      $this->usePowerShellRemove($folderPath, 0777); // Xóa thư mục nếu giờ đã rỗng
+      // echo "Đã xóa thư mục rỗng: $folderPath\n";
+      return true;
+    }
+
+    return false;
+  }
+  function writeDescriptionFile($folderPath, $content)
+  {
+    // Đường dẫn và tên file
+    $filename =  root($folderPath . '/description.txt');
+
+
+
+    // Mở file ở chế độ ghi (write)
+    $file = fopen($filename, 'w');
+
+    // Kiểm tra xem file có mở được không
+    if ($file) {
+      // Ghi nội dung vào file
+      fwrite($file, $content);
+
+      // Đóng file
+      fclose($file);
+    }
+  }
+
+  function getDirectoryInfo($directory, $base)
+  {
+
+    $result = [];
+    if (!is_dir($directory)) {
+      return $result;
+    }
+    // Định dạng file ảnh và video
+
+
+    // Lấy danh sách tất cả các file trong thư mục
+    $files = scandir($directory);
+    $files = array_diff($files, array('.', '..')); // Loại bỏ '.' và '..'
+
+    // Duyệt qua các file
+    foreach ($files as $file) {
+
+      $filePath =  ($base  . "/" . $file);
+      $result[] = $filePath;
+    }
+
+    return $result;
+  }
+  function store()
+  {
+
+    Validator::response($_REQUEST, [
+      'event_name' => 'required',
+      'event_date' => 'required',
+      'category_id' => 'required',
+      'description' => 'required'
+    ]);
+
+    if (requestIsNotEmpty('media') && is_string($_REQUEST['media'])) {
+      $_REQUEST['media'] = json_decode($_REQUEST['media']);
+    }
+
+
+    $_REQUEST['event_name'] = $this->sanitizeFolderName($_REQUEST['event_name']);
+
+
+    $checkExistItem = DB::table('events')
+      ->whereRaw("UPPER(event_name) = UPPER('{$_REQUEST['event_name']}')")
+      ->whereRaw("DATE(event_date) = DATE('{$_REQUEST['event_date']}')")
+      ->whereRaw('deleted_at is NULL')
+      ->first();
+
+
+    if ($checkExistItem) {
+      response(['msg' => 'Bad Request', 'errors' => ['unique' => 'Event name is exists']], 400);
+    }
+
+
+    //Kiem tra so luong file
+    $this->checkExistFile($_REQUEST['media']);
+    $maxId =  Event::db()->selectRaw('Max(id) as max_id')->first();
+    $newFolder = $this->createNewEventFolder($_REQUEST);
+    $_REQUEST['path'] = $newFolder;
+    $_REQUEST['id'] = $maxId['max_id'] + 1;
+
+
+    $this->writeDescriptionFile($newFolder, $_REQUEST['description']);
+    $_REQUEST['create_by'] = SessionManager::get('user_id') . " - " .  SessionManager::get('user_name');
+    $_REQUEST['created_at'] = now();
+
+
+
+    $store = Event::store($_REQUEST)->save();
+
+    if ($store) {
+
+      foreach ($_REQUEST['media'] as $row) {
+        $row = (array) $row;
+        $row['event_id'] = $_REQUEST['id'];
+        $row['file_path'] = $this->moveFileToEventFolder($row['file_path'], $newFolder);
+        $row['is_show'] = $row['is_show'] == 1 ? 1 : 0;
+        EventMedia::store($row)->save();
+      }
+    }
+
+    response(['msg' => 'Event has been created successfully', 'data' => $_REQUEST]);
+  }
+
+
+  function update()
+  {
+    Validator::response($_REQUEST, [
+      'id' => 'required',
+
+    ]);
+    if (requestIsNotEmpty('event_name')) {
+      $_REQUEST['event_name'] = $this->sanitizeFolderName($_REQUEST['event_name']);
+    }
+
+
+    if (requestIsNotEmpty('media') && is_string($_REQUEST['media'])) {
+      $_REQUEST['media'] = json_decode($_REQUEST['media']);
+      $this->checkExistFile($_REQUEST['media']);
+    }
+
+
+    //Kiem tra so luong file
+
+    $oldData = Event::db()->where('id',  $_REQUEST['id'])->first();
+
+    if ($oldData['event_name'] != $_REQUEST['event_name']) {
+    }
+    $checkExistItem = DB::table('events')
+      ->whereRawCheck('id <> ', $_REQUEST['id'])
+      ->whereRaw("UPPER(event_name) = UPPER('{$_REQUEST['event_name']}')")
+      ->whereRaw("DATE(event_date) = DATE('{$_REQUEST['event_date']}')")
+      ->whereRaw('deleted_at is NULL')
+      ->first();
+
+
+
+    if ($checkExistItem) {
+      response(['msg' => 'Bad Request', 'errors' => ['unique' => 'Event name is exists']], 400);
+    }
+
+    $descriptionPath = root($oldData['path'] . "/description.txt");
+    if (file_exists($descriptionPath)) {
+      unlink(root($oldData['path'] . "/description.txt"));
+    }
+
+    $_REQUEST['path'] = $this->createNewEventFolder($_REQUEST);
+
+    $_REQUEST['update_by'] =  SessionManager::get('user_id') . " - " .  SessionManager::get('user_name');
+    $_REQUEST['updated_at'] = now();
+    Event::update(['id' => $_REQUEST['id']], $_REQUEST)->save();
+
+    $this->writeDescriptionFile($_REQUEST['path'], $_REQUEST['description']);
+
+
+    if ($oldData) {
+      if (requestIsNotEmpty('media') && is_array($_REQUEST['media']) && count($_REQUEST['media']) > 0) {
+        foreach ($_REQUEST['media'] as $row) {
+          $row = (array) $row;
+          $row['event_id'] = $_REQUEST['id'];
+
+          $checkedMedia = DB::table('event_media')
+            ->where('event_id', $row['event_id'])
+            ->where('file_path', $row['file_path'])
+            ->whereRaw('deleted_at is NULL')
+            ->first();
+
+          $row['file_path'] = $this->moveFileToEventFolder($row['file_path'], $_REQUEST['path']);
+
+          $row['is_show'] = $row['is_show'] == 1 ? 1 : 0;
+          if ($checkedMedia) {
+            EventMedia::update(['media_id' => $checkedMedia['media_id']], $row)->save();
+          } else {
+
+            EventMedia::store($row)->save();
+          }
+        }
+      }
+
+      if ($oldData['event_name'] != $_REQUEST['event_name']) {
+        //$this->removeFolder();
+      }
+
+
+
+      $db  = DB::table('events')->where('id', $_REQUEST['id'])->first();
+
+      $dbMedia = DB::table('event_media')
+        ->whereRaw('deleted_at is NULL')
+        ->where('event_id', $_REQUEST['id']);
+
+      $db['media'] = $dbMedia->get();
+      response(['msg' => 'Event has been updated successfully', 'data' => $db]);
+    } else {
+      response(['msg' => 'Not exists'], 404);
+    }
+  }
+
+  function import()
+  {
+    if (requestIsNotEmpty('id')) {
+      $this->update();
+    } else {
+      response(['msg' => 'Event not Id', 'data' => $_REQUEST]);
+    }
+  }
+
+  function moveFileToEventFolder($oldPath, $newFolder)
+  {
+    $url = $oldPath;
+    $fileName = basename($url); // Lấy tên file từ URL
+    $newPath = root("/") . $newFolder . '/' . $fileName; // Tạo đường dẫn mới
+    $url =  root($url);
+    // Kiểm tra nếu file tồn tại và di chuyển file
+    if (file_exists($url)) {
+
+      if (rename($url, $newPath)) {
+        return $newFolder . '/' . $fileName;
+      } else {
+        return $oldPath;
+      }
+    }
+    return $oldPath;
+  }
+  function delete()
+  {
+    Validator::response($_REQUEST, [
+      'id' => 'required',
+
+    ]);
+
+    $db = Event::db()->whereRaw('deleted_at is NULL')->where('id',  $_REQUEST['id']);
+    
+    if (!Auth::checkPermission('Event_Admin')) {
+      $db->where("events.create_by", Auth::name());
+    }
+    
+    $data = $db->first();
+
+    if ($data) {
+      $folder =  root($data['path']);
+
+      Event::update(['id' => $_REQUEST['id']], ['deleted_at' => now()])->save();
+      $this->deleteFolder($folder);
+      response(["msg" => "Event has been deleted successfully", 'data' => $data]);
+    }
+    response(["msg" => "Event not found"], 400);
+  }
+  function deleteFolder($folderPath)
+  {
+
+    try {
+      if (!is_dir($folderPath)) {
+        //response(["msg" => "Thư mục không tồn tại."], 400);
+        return;
+      }
+      // Xóa tất cả file và thư mục con
+      $files = array_diff(scandir($folderPath), ['.', '..']); // Loại bỏ . và ..
+      foreach ($files as $file) {
+        $filePath = $folderPath . '/' . $file;
+        if (is_dir($filePath)) {
+          $this->deleteFolder($filePath); // Đệ quy để xóa thư mục con
+        } else {
+          unlink($filePath); // Xóa file
+        }
+      }
+
+      // Xóa thư mục rỗng sau khi đã xóa hết nội dung
+
+      //  $this->removeFolder();
+    } catch (Exception $e) {
+      response(['msg' => 'Server Error', 'errors' => ['error' => $e]]);
+    }
+  }
+
+  function deleteFile()
+  {
+
+    Validator::response($_REQUEST['data'], [
+      'path' => 'required'
+    ]);
+    $filePath = root($_REQUEST['data']['path']);
+    EventMedia::delete(['file_path' => $_REQUEST['data']['path']])->save();
+    if (file_exists($filePath)) {
+      //  if (unlink($filePath)) {
+      response(['msg' => 'Event has been deleted successfully', 'data' => $_REQUEST]);
+      //   } else {
+      // response(['msg' => "File can't delete"], 400);
+      //  }
+    } else {
+      response(['msg' => "File not exists"], 404);
+    }
+  }
+
+  function response($data)
+  {
+    header('Content-Type: application/json');
+    echo json_encode($data, JSON_UNESCAPED_UNICODE);
+    exit;
+  }
+  /**
+   * Enhanced upload function with resumable video upload support
+   */
+  function upload()
+  {
+    return $this->handleRegularUpload();
+    // try {
+    //   $method = $_SERVER['REQUEST_METHOD'];
+    //   switch ($method) {
+    //     case 'GET':
+    //       return $this->handleChunkCheck();
+    //     case 'POST':
+    //       // Check if this is a resumable upload or regular upload
+    //       if ($this->isResumableUpload()) {
+    //         return $this->handleResumableUpload();
+    //       } else {
+
+    //       }
+    //     default:
+    //       return response(['error' => 'Method not allowed'], 405);
+    //   }
+    // } catch (Exception $e) {
+    //   return response(['error' => $e->getMessage()], 400);
+    // }
+  }
+
+  /**
+   * Xử lý upload file thông thường
+   */
+  private function handleRegularUpload()
+  {
+    $targetDir = '/assets/uploads';
+
+    if (!file_exists(root($targetDir))) {
+      @mkdir(root($targetDir), 0777, true);
+    }
+
+    $fileBlob = 'file_data';
+    $request = Request::createFromGlobals();
+    $files = $request->files->get($fileBlob);
+
+    if (!$files) {
+      return response(['error' => 'No file found'], 400);
+    }
+
+    if (!is_array($files)) {
+      $files = [$files];
+    }
+
+    $uploadedResults = [];
+    $maxImageSize = 20 * 1024 * 1024;       // 20MB
+    $minImageSize = 100 * 1024;             // 100kB
+    $maxVideoSize = 500 * 1024 * 1024;      // 500MB for regular upload
+    $minVideoSize = 3 * 1024 * 1024;        // 3MB
+
+    foreach ($files as $file) {
+      if ($file) {
+        $size = $file->getSize();
+        $mime = $file->getClientMimeType();
+        $originalName = $file->getClientOriginalName();
+
+        if (strpos($mime, 'image/') === 0) {
+          if ($size < $minImageSize || $size > $maxImageSize) {
+            return response([
+              'error' => "Image file size must be between 100kB and 20MB for file: $originalName"
+            ], 400);
+          }
+        } elseif (strpos($mime, 'video/') === 0) {
+          if ($size < $minVideoSize) {
+            return response([
+              'error' => "Minimum video file size is 3MB for file: $originalName. For larger videos, use resumable upload."
+            ], 400);
+          }
+          // if ($size > $maxVideoSize) {
+          //   return response([
+          //     'error' => "Video file too large for regular upload: $originalName. Please use resumable upload for files larger than 500MB."
+          //   ], 400);
+          // }
+        } else {
+          return response([
+            'error' => "Unsupported file type: $mime for file: $originalName"
+          ], 400);
+        }
+      }
+    }
+
+    foreach ($files as $file) {
+      $originalExtension = strtolower(pathinfo($file->getClientOriginalName(), PATHINFO_EXTENSION));
+      $originalName = bin2hex(random_bytes(10)) . '.' . $originalExtension;
+      $tempPath = $file->getPathname();
+      $targetPath = root($targetDir) . '/' . $originalName;
+
+      try {
+        // Nếu là hình ảnh và kích thước lớn hơn 1MB, thực hiện nén
+        if (strpos($file->getClientMimeType(), 'image/') === 0 && $file->getSize() > 1024 * 1024) {
+          $this->compressImageWithIntervention($tempPath, $targetPath, $originalExtension);
+        } else {
+          // Nếu không phải hình ảnh hoặc nhỏ hơn 1MB, upload bình thường
+          $file->move(root($targetDir), $originalName);
+        }
+
+        $uploadedResults = [
+          'file_path' => $targetDir . "/" . $originalName,
+          'file_name' => $originalName
+        ];
+      } catch (Exception $e) {
+        return response(['error' => "Error uploading file: $originalName. " . $e->getMessage()], 400);
+      }
+    }
+
+    return response(['success' => true, 'data' => $uploadedResults]);
+  }
+
+  /**
+   * Nén hình ảnh xuống kích thước khoảng 1MB sử dụng Intervention Image v3.11
+   */
+  private function compressImageWithIntervention($sourcePath, $targetPath, $extension)
+  {
+    // Sử dụng Intervention Image v3.11
+
+    try {
+      // Ưu tiên sử dụng Imagick nếu có, không thì dùng GD
+      if (extension_loaded('imagick')) {
+        $manager = new ImageManager(new ImagickDriver());
+      } else {
+        $manager = new ImageManager(new GdDriver());
+      }
+
+      $image = $manager->read($sourcePath);
+
+      // Lấy kích thước ban đầu của file để tính tỷ lệ nén
+      $currentSize = filesize($sourcePath);
+      $targetSize = 1024 * 1024; // 1MB
+
+      // Tính toán tỷ lệ nén
+      $ratio = sqrt($targetSize / $currentSize);
+      $ratio = max($ratio, 0.5); // Không giảm quá 50% kích thước
+
+      // Tính kích thước mới
+      $newWidth = (int)($image->width() * $ratio);
+
+      // Sử dụng scale thay vì resize để giữ tỷ lệ khung hình
+      $image = $image->scale(width: $newWidth);
+
+      // Xác định định dạng đầu ra dựa trên extension
+      $extension = strtolower($extension);
+      $quality = 85; // Chất lượng ban đầu
+
+      // Tạo encoded object theo định dạng
+      switch ($extension) {
+        case 'jpg':
+        case 'jpeg':
+        case 'jfif':
+          $encoded = $image->toJpeg(quality: $quality);
+          break;
+        case 'png':
+          $encoded = $image->toPng();
+          break;
+        case 'gif':
+          $encoded = $image->toGif();
+          break;
+        case 'webp':
+          $encoded = $image->toWebp(quality: $quality);
+          break;
+
+        default:
+          // Mặc định chuyển về JPEG nếu không xác định được
+          $encoded = $image->toJpeg(quality: $quality);
+          break;
+      }
+
+      // Lưu file
+      $encoded->save($targetPath);
+
+      // Kiểm tra kích thước sau khi nén
+      $compressedSize = filesize($targetPath);
+
+      // Nếu vẫn lớn hơn 1MB và là định dạng hỗ trợ nén
+      if ($compressedSize > 1024 * 1024 && in_array($extension, ['jpg', 'jpeg', 'webp', 'jfif'])) {
+        // Giảm dần chất lượng để đạt kích thước mong muốn
+        $attempts = 0;
+        $minQuality = 40;
+
+        while ($compressedSize > 1024 * 1024 && $quality > $minQuality && $attempts < 5) {
+          $quality -= 10;
+
+          if (in_array($extension, ['jpg', 'jpeg', 'jfif'])) {
+            $encoded = $image->toJpeg(quality: $quality);
+          } else if ($extension == 'webp') {
+            $encoded = $image->toWebp(quality: $quality);
+          }
+
+          $encoded->save($targetPath);
+          $compressedSize = filesize($targetPath);
+          $attempts++;
+        }
+
+        // Nếu vẫn lớn hơn 1MB sau khi giảm chất lượng, thử giảm kích thước thêm
+        if ($compressedSize > 1024 * 1024) {
+          $newWidth = (int)($image->width() * 0.8); // Giảm 20% kích thước
+          $image = $image->scale(width: $newWidth);
+
+          if (in_array($extension, ['jpg', 'jpeg', 'jfif'])) {
+            $encoded = $image->toJpeg(quality: $quality);
+          } else if ($extension == 'webp') {
+            $encoded = $image->toWebp(quality: $quality);
+          }
+
+          $encoded->save($targetPath);
+        }
+      }
+
+      return $targetPath;
+    } catch (Exception $e) {
+      // Xử lý ngoại lệ nếu có
+      throw new Exception("Không thể nén hình ảnh: " . $e->getMessage());
+    }
+  }
+
+  /**
+   * Validate video file for resumable upload
+   */
+  private function validateVideoFile($filename, $size)
+  {
+    if ($size > $this->uploadConfig['max_file_size']) {
+      throw new Exception('File too large. Maximum size: ' . $this->formatBytes($this->uploadConfig['max_file_size']));
+    }
+
+    $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    if (!in_array($extension, $this->uploadConfig['allowed_extensions'])) {
+      throw new Exception('Invalid file type. Allowed: ' . implode(', ', $this->uploadConfig['allowed_extensions']));
+    }
+  }
+
+  /**
+   * Validate upload token
+   */
+  private function validateUploadToken($token)
+  {
+    return !empty($token) && strlen($token) >= 10;
+  }
+
+  /**
+   * Get chunk file path
+   */
+  private function getChunkFilePath($identifier, $chunkNumber)
+  {
+    return root($this->uploadConfig['temp_dir'] . $identifier . '_chunk_' . $chunkNumber);
+  }
+
+  /**
+   * Check if all chunks are uploaded
+   */
+  private function allChunksUploaded($identifier, $totalChunks)
+  {
+    for ($i = 1; $i <= $totalChunks; $i++) {
+      if (!file_exists($this->getChunkFilePath($identifier, $i))) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Assemble final file from chunks
+   */
+  private function assembleFile($identifier, $filename, $totalChunks)
+  {
+    $filename = preg_replace('/[^a-zA-Z0-9._-]/', '_', $filename);
+    $finalPath = root($this->uploadConfig['upload_dir'] . time() . '_' . $filename);
+
+    $finalFile = fopen($finalPath, 'wb');
+    if (!$finalFile) {
+      throw new Exception('Cannot create final file');
+    }
+
+    try {
+      for ($i = 1; $i <= $totalChunks; $i++) {
+        $chunkFile = $this->getChunkFilePath($identifier, $i);
+        $chunk = fopen($chunkFile, 'rb');
+
+        if (!$chunk) {
+          throw new Exception('Cannot read chunk ' . $i);
+        }
+
+        while (!feof($chunk)) {
+          fwrite($finalFile, fread($chunk, 8192));
+        }
+
+        fclose($chunk);
+      }
+    } finally {
+      fclose($finalFile);
+    }
+
+    if (!file_exists($finalPath) || filesize($finalPath) == 0) {
+      throw new Exception('File assembly failed');
+    }
+
+    $this->validateAssembledVideoFile($finalPath);
+
+    return $finalPath;
+  }
+
+  /**
+   * Validate assembled video file
+   */
+  private function validateAssembledVideoFile($filePath)
+  {
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    $mimeType = finfo_file($finfo, $filePath);
+    finfo_close($finfo);
+
+    $validMimeTypes = [
+      'video/mp4',
+      'video/avi',
+      'video/quicktime',
+      'video/x-msvideo',
+      'video/x-flv',
+      'video/x-matroska'
+    ];
+
+    if (!in_array($mimeType, $validMimeTypes)) {
+      unlink($filePath);
+      throw new Exception('Invalid video file format');
+    }
+  }
+
+  /**
+   * Cleanup chunk files
+   */
+  private function cleanupChunks($identifier, $totalChunks)
+  {
+    for ($i = 1; $i <= $totalChunks; $i++) {
+      $chunkFile = $this->getChunkFilePath($identifier, $i);
+      if (file_exists($chunkFile)) {
+        unlink($chunkFile);
+      }
+    }
+  }
+
+  /**
+   * Get request parameter from GET or POST
+   */
+  private function getRequestParam($key)
+  {
+    return $_GET[$key] ?? $_POST[$key] ?? null;
+  }
+
+  /**
+   * Format bytes to human readable format
+   */
+  private function formatBytes($size, $precision = 2)
+  {
+    $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+
+    for ($i = 0; $size > 1024 && $i < count($units) - 1; $i++) {
+      $size /= 1024;
+    }
+
+    return round($size, $precision) . ' ' . $units[$i];
+  }
+
+  /**
+   * Get upload error message
+   */
+  private function getUploadErrorMessage($error)
+  {
+    $errors = [
+      UPLOAD_ERR_INI_SIZE => 'File exceeds upload_max_filesize',
+      UPLOAD_ERR_FORM_SIZE => 'File exceeds MAX_FILE_SIZE',
+      UPLOAD_ERR_PARTIAL => 'File was only partially uploaded',
+      UPLOAD_ERR_NO_FILE => 'No file was uploaded',
+      UPLOAD_ERR_NO_TMP_DIR => 'Missing temporary folder',
+      UPLOAD_ERR_CANT_WRITE => 'Failed to write file to disk',
+      UPLOAD_ERR_EXTENSION => 'Upload stopped by extension'
+    ];
+
+    return $errors[$error] ?? 'Unknown upload error';
+  }
+
+  /**
+   * Generate upload progress status
+   */
+  function getUploadProgress()
+  {
+    $uploadToken = $this->getRequestParam('upload_token');
+
+    if (!$uploadToken) {
+      return response(['error' => 'Upload token required'], 400);
+    }
+
+    // You can implement database tracking here
+    // For now, return a simple response
+    return response([
+      'upload_token' => $uploadToken,
+      'status' => 'in_progress',
+      'progress' => 0
+    ]);
+  }
+
+  private function checkExistFile($files)
+  {
+    $videos = [];
+    $images = [];
+    $videoExts = ['mp4', 'avi', 'mkv', 'mov', 'wmv'];
+    $imageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+    foreach ($files as $file) {
+      $filePath = $file->file_path;
+      $ext = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+
+      if (in_array($ext, $videoExts)) {
+        $videos[] = $file;
+      } elseif (in_array($ext, $imageExts)) {
+        $images[] = $file;
+      }
+    }
+
+    $videoCount = count($videos);
+    $imageCount = count($images);
+
+    $errors = [];
+    if ($videoCount > $this->uploadConfig['max_video_count']) {
+      $errors[] = "You can upload up to {$this->uploadConfig['max_video_count']} videos only.";
+    }
+
+    if ($imageCount > $this->uploadConfig['max_image_count']) {
+      $errors[] = "You can upload up to {$this->uploadConfig['max_image_count']} images only.";
+    }
+
+    if (!empty($errors)) {
+      return response([
+        'msg' => 'BAD REQUEST',
+        'errors' => $errors
+      ], 400);
+    }
+  }
+}
+</file>
+
+<file path="Controllers/ExportController.php">
+<?php
+
+namespace Controllers; // Điều chỉnh namespace tùy thuộc vào framework của bạn
+
+use Core\Auth;
+use Core\DB;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use Models\Event;
+use Models\EventMedia;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+
+class ExportController
+{
+
+    /**
+     * Lấy dữ liệu events từ database
+     * Phương thức này cần được triển khai dựa trên framework/ORM của bạn
+     */
+    /**
+     * Lấy dữ liệu events từ database
+     */
+    private function getEventsData()
+    {
+        return DB::table('events')
+            ->join("categories", "events.category_id=categories.category_id")
+            ->selectRaw("events.*, categories.category_name")
+            ->whereRaw("events.deleted_at is NULL")
+            ->order('event_date', 'desc')
+            ->get();
+    }
+
+    /**
+     * Lấy dữ liệu event_media từ database
+     */
+    private function getEventMediaData()
+    {
+        return DB::table('event_media')
+            ->whereRaw('deleted_at is NULL')
+            ->order("`order`")
+            ->get();
+    }
+    /**
+     * Xuất dữ liệu Events và Event Media ra Excel
+     */
+    public function exportEventsToExcel()
+    {
+        // Kiểm tra token nếu cần
+
+        // Khởi tạo đối tượng Spreadsheet
+        $spreadsheet = new Spreadsheet();
+
+        // Tạo sheet đầu tiên cho events
+        $eventsSheet = $spreadsheet->getActiveSheet();
+        $eventsSheet->setTitle('Events');
+
+        // Thiết lập header cho sheet events
+        $eventsSheet->setCellValue('A1', 'id');
+        $eventsSheet->setCellValue('B1', 'event_name');
+        $eventsSheet->setCellValue('C1', 'event_date');
+        $eventsSheet->setCellValue('D1', 'description');
+        $eventsSheet->setCellValue('E1', 'category_name');
+        $eventsSheet->setCellValue('F1', 'path');
+        $eventsSheet->setCellValue('G1', 'create_by');
+        $eventsSheet->setCellValue('H1', 'update_by');
+        $eventsSheet->setCellValue('I1', 'is_big_event');
+
+        // Định dạng header
+        $this->formatHeader($eventsSheet, 'A1:I1');
+
+        // Lấy dữ liệu events từ database
+        $events = $this->getEventsData();
+
+        // Đổ dữ liệu vào sheet events
+        $row = 2;
+        foreach ($events as $event) {
+            $eventsSheet->setCellValue('A' . $row, $event['id']);
+            $eventsSheet->setCellValue('B' . $row, $event['event_name']);
+            $eventsSheet->setCellValue('C' . $row, $event['event_date']);
+            $eventsSheet->setCellValue('D' . $row, strip_tags($event['description']));
+            $eventsSheet->setCellValue('E' . $row, $event['category_name']);
+            $eventsSheet->setCellValue('F' . $row, $event['path']);
+            $eventsSheet->setCellValue('G' . $row, $event['create_by']);
+            $eventsSheet->setCellValue('H' . $row, $event['created_at']);
+            $eventsSheet->setCellValue('I' . $row, $event['is_big_event']);
+            $row++;
+        }
+
+        // Auto size columns
+        // foreach (range('A', 'H') as $col) {
+        //     $eventsSheet->getColumnDimension($col)->setAutoSize(true);
+        // }
+
+        // Tạo sheet thứ hai cho event_media
+        $mediaSheet = $spreadsheet->createSheet();
+        $mediaSheet->setTitle('Event Media');
+
+        // Thiết lập header cho sheet event_media
+        $mediaSheet->setCellValue('A1', 'media_id');
+        $mediaSheet->setCellValue('B1', 'event_id');
+        $mediaSheet->setCellValue('C1', 'media_name');
+        $mediaSheet->setCellValue('D1', 'is_show');
+        $mediaSheet->setCellValue('E1', 'order');
+        $mediaSheet->setCellValue('F1', 'file_path');
+        $mediaSheet->setCellValue('G1', 'type');
+
+        // Định dạng header
+        $this->formatHeader($mediaSheet, 'A1:G1');
+
+        // Lấy dữ liệu event_media từ database
+        $eventMedia = $this->getEventMediaData();
+
+        // Tạo map để lưu tên sự kiện theo ID
+        $eventNames = [];
+        foreach ($events as $event) {
+            $eventNames[$event['id']] = $event['event_name'];
+        }
+
+        // Đổ dữ liệu vào sheet event_media
+        $row = 2;
+        foreach ($eventMedia as $media) {
+            $mediaSheet->setCellValue('A' . $row, $media['media_id']);
+            $mediaSheet->setCellValue('B' . $row, $media['event_id']);
+            $mediaSheet->setCellValue('C' . $row, $media['media_name']);
+            $mediaSheet->setCellValue('D' . $row, $media['is_show']);
+            $mediaSheet->setCellValue('E' . $row, $media['order']);
+            $mediaSheet->setCellValue('F' . $row, $media['file_path']);
+
+            // Xác định loại file dựa vào phần mở rộng
+            $extension = pathinfo($media['file_path'], PATHINFO_EXTENSION);
+            $fileType = $this->getFileType($extension);
+            $mediaSheet->setCellValue('G' . $row, $fileType);
+
+            $row++;
+        }
+
+        // Auto size columns
+        foreach (range('A', 'G') as $col) {
+            $mediaSheet->getColumnDimension($col)->setAutoSize(true);
+        }
+
+        // Đặt sheet events làm active khi mở file
+        $spreadsheet->setActiveSheetIndex(0);
+
+        // Tạo đối tượng Writer để ghi file
+        $writer = new Xlsx($spreadsheet);
+
+        // Thiết lập header cho response
+        $filename = 'LSTS_Events_Export_' . date('Y-m-d_H-i-s') . '.xlsx';
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment;filename="' . $filename . '"');
+        header('Cache-Control: max-age=0');
+
+        // Ghi file trực tiếp vào output
+        $writer->save('php://output');
+        exit;
+    }
+
+    /**
+     * Định dạng header của sheet
+     */
+    private function formatHeader($sheet, $range)
+    {
+        $sheet->getStyle($range)->applyFromArray([
+            'font' => [
+                'bold' => true,
+                'color' => ['rgb' => 'FFFFFF'],
+            ],
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => ['rgb' => '4472C4'],
+            ],
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                ],
+            ],
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER,
+            ],
+        ]);
+    }
+
+
+    /**
+     * Xác định loại file dựa vào phần mở rộng
+     */
+    private function getFileType($extension)
+    {
+        $extension = strtolower($extension);
+
+        $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        $videoExtensions = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv'];
+
+        if (in_array($extension, $imageExtensions)) {
+            return 'Image';
+        } elseif (in_array($extension, $videoExtensions)) {
+            return 'Video';
+        } else {
+            return 'Unknow';
+        }
+    }
+}
+</file>
+
+<file path="Controllers/ImportController.php">
+<?php
+
+namespace Controllers;
+
+use Core\Auth;
+use Core\DB;
+use Core\Validator;
+use Models\Event;
+use Models\EventMedia;
+use Exception;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\IOFactory;
+
+class ImportController
+{
+    /**
+     * Xác thực file Excel trước khi import
+     */
+    public function validateExcel()
+    {
+        try {
+            // Kiểm tra quyền truy cập
+            if (!Auth::user()) {
+                return $this->jsonResponse(['message' => 'Unauthorized'], 401);
+            }
+            
+            // Kiểm tra file upload
+            if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+                return $this->jsonResponse(['message' => 'Không tìm thấy file hoặc file lỗi'], 400);
+            }
+            
+            $file = $_FILES['file'];
+            
+            // Kiểm tra file type
+            $fileType = $file['type'];
+            $allowedTypes = [
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+                'application/vnd.ms-excel' // .xls
+            ];
+            
+            if (!in_array($fileType, $allowedTypes) && !preg_match('/\.xlsx$/i', $file['name'])) {
+                return $this->jsonResponse(['message' => 'File phải có định dạng Excel (.xlsx)'], 400);
+            }
+            
+            // Đọc file Excel
+            $spreadsheet = IOFactory::load($file['tmp_name']);
+            
+            // Kiểm tra số lượng sheet
+            if ($spreadsheet->getSheetCount() < 2) {
+                return $this->jsonResponse([
+                    'valid' => false,
+                    'errors' => ['File phải có ít nhất 2 sheet (Events và Event Media)']
+                ]);
+            }
+            
+            // Đọc sheet Events
+            $eventsSheet = $spreadsheet->getSheet(0);
+            $eventsData = $eventsSheet->toArray();
+            
+            // Kiểm tra header của sheet Events
+            $eventsHeader = $eventsData[0] ?? [];
+            $requiredEventsHeader = ['Tên Sự Kiện', 'Ngày Sự Kiện', 'Loại Sự Kiện', 'Mô tả'];
+            
+            $missingHeaders = array_diff($requiredEventsHeader, $eventsHeader);
+            if (!empty($missingHeaders)) {
+                return $this->jsonResponse([
+                    'valid' => false,
+                    'errors' => ['Sheet Events thiếu các cột: ' . implode(', ', $missingHeaders)]
+                ]);
+            }
+            
+            // Đọc sheet Event Media
+            $mediaSheet = $spreadsheet->getSheet(1);
+            $mediaData = $mediaSheet->toArray();
+            
+            // Kiểm tra header của sheet Event Media
+            $mediaHeader = $mediaData[0] ?? [];
+            $requiredMediaHeader = ['Event ID', 'Đường dẫn file', 'Hiển thị', 'Thứ tự'];
+            
+            $missingHeaders = array_diff($requiredMediaHeader, $mediaHeader);
+            if (!empty($missingHeaders)) {
+                return $this->jsonResponse([
+                    'valid' => false,
+                    'errors' => ['Sheet Event Media thiếu các cột: ' . implode(', ', $missingHeaders)]
+                ]);
+            }
+            
+            // Chuẩn bị preview
+            $eventsPreview = [];
+            $eventMediaPreview = [];
+            
+            // Lấy index của các cột
+            $eventNameIndex = array_search('Tên Sự Kiện', $eventsHeader);
+            $eventDateIndex = array_search('Ngày Sự Kiện', $eventsHeader);
+            $categoryNameIndex = array_search('Loại Sự Kiện', $eventsHeader);
+            
+            // Lấy dữ liệu preview cho events (bỏ qua header)
+            for ($i = 1; $i < count($eventsData); $i++) {
+                if (empty($eventsData[$i][$eventNameIndex])) continue;
+                
+                $eventsPreview[] = [
+                    'event_name' => $eventsData[$i][$eventNameIndex],
+                    'event_date' => $eventsData[$i][$eventDateIndex],
+                    'category_name' => $eventsData[$i][$categoryNameIndex]
+                ];
+            }
+            
+            // Lấy index của các cột media
+            $eventIdIndex = array_search('Event ID', $mediaHeader);
+            $filePathIndex = array_search('Đường dẫn file', $mediaHeader);
+            $isShowIndex = array_search('Hiển thị', $mediaHeader);
+            $mediaName = array_search('Tên Sự Kiện', $mediaHeader);
+            $order = array_search('Thứ tự', $mediaHeader);
+            $mediaId = array_search('ID', $mediaHeader);
+            
+            // Lấy dữ liệu preview cho event media (bỏ qua header)
+            for ($i = 1; $i < count($mediaData); $i++) {
+                if (empty($mediaData[$i][$eventIdIndex]) || empty($mediaData[$i][$filePathIndex])) continue;
+                
+                $eventMediaPreview[] = [
+                    'event_id' => $mediaData[$i][$eventIdIndex],
+                    'media_name' => $mediaData[$i][$mediaName] ?? '',
+                    'media_id' => $mediaData[$i][$mediaId],
+                    'order' => $mediaData[$i][$order],
+                    'file_path' => $mediaData[$i][$filePathIndex],
+                    'is_show' => $mediaData[$i][$isShowIndex]
+                ];
+            }
+            
+            // Trả về kết quả xác thực và preview
+            return $this->jsonResponse([
+                'valid' => true,
+                'preview' => [
+                    'events' => $eventsPreview,
+                    'eventMedia' => $eventMediaPreview
+                ]
+            ]);
+        } catch (Exception $e) {
+            return $this->jsonResponse([
+                'valid' => false,
+                'errors' => [$e->getMessage()]
+            ], 400);
+        }
+    }
+    
+    /**
+     * Import dữ liệu từ file Excel
+     */
+    public function importEventsExcel()
+    {
+        try {
+            // Kiểm tra quyền truy cập
+
+            
+            // Kiểm tra file upload
+            if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+                return $this->jsonResponse(['message' => 'Không tìm thấy file hoặc file lỗi'], 400);
+            }
+            
+            $file = $_FILES['file'];
+            $updateExisting = isset($_POST['update_existing']) && $_POST['update_existing'] == 1;
+            
+            // Đọc file Excel
+            $spreadsheet = IOFactory::load($file['tmp_name']);
+            
+            // Xử lý import
+          
+            
+            try {
+                $stats = $this->processImport($spreadsheet, $updateExisting);
+                
+               
+                
+                return $this->jsonResponse([
+                    'success' => true,
+                    'message' => "Import thành công: {$stats['inserted']} thêm mới, {$stats['updated']} cập nhật, {$stats['media']} media.",
+                    'stats' => $stats
+                ]);
+            } catch (Exception $e) {
+               
+                throw $e;
+            }
+        } catch (Exception $e) {
+            return $this->jsonResponse([
+                'success' => false,
+                'message' => 'Lỗi import: ' . $e->getMessage()
+            ], 400);
+        }
+    }
+    
+    /**
+     * Xử lý import dữ liệu từ file Excel
+     */
+    private function processImport($spreadsheet, $updateExisting)
+    {
+        $stats = [
+            'inserted' => 0,
+            'updated' => 0,
+            'skipped' => 0,
+            'media' => 0
+        ];
+        
+        // Đọc sheet Events
+        $eventsSheet = $spreadsheet->getSheet(0);
+        $eventsData = $eventsSheet->toArray();
+        
+        // Lấy header của sheet Events
+        $eventsHeader = $eventsData[0];
+        
+        // Map index của các cột
+        $eventNameIndex = array_search('Tên Sự Kiện', $eventsHeader);
+        $eventDateIndex = array_search('Ngày Sự Kiện', $eventsHeader);
+        $categoryNameIndex = array_search('Loại Sự Kiện', $eventsHeader);
+        $descriptionIndex = array_search('Mô tả', $eventsHeader);
+        $isBigEventIndex = array_search('Sự kiện lớn', $eventsHeader);
+        
+        // Tạo map của category_name => category_id
+        $categories = DB::table('categories')->whereRaw('deleted_at is NULL')->get();
+        $categoryMap = [];
+        foreach ($categories as $category) {
+            $categoryMap[strtolower($category['category_name'])] = $category['category_id'];
+        }
+        
+        // Map để lưu trữ event_name => event_id
+        $eventMap = [];
+        
+        // Đọc dữ liệu events (bỏ qua header)
+        for ($i = 1; $i < count($eventsData); $i++) {
+            $row = $eventsData[$i];
+            
+            // Bỏ qua hàng trống
+            if (empty($row[$eventNameIndex]) || empty($row[$eventDateIndex])) {
+                continue;
+            }
+            
+            $eventName = $row[$eventNameIndex];
+            $eventDate = $row[$eventDateIndex];
+            $categoryName = $row[$categoryNameIndex] ?? '';
+            $description = $row[$descriptionIndex] ?? '';
+            $isBigEvent = $row[$isBigEventIndex] ?? 0;
+            
+            // Tìm category_id từ category_name
+            $categoryId = $categoryMap[strtolower($categoryName)] ?? null;
+            
+            if (!$categoryId) {
+                // Nếu không tìm thấy category, tạo category mới
+                $newCategoryId = DB::table('categories')->selectRaw('COALESCE(MAX(category_id) + 1, 1) as new_id')->first()['new_id'];
+                
+                DB::table('categories')->insert([
+                    'category_id' => $newCategoryId,
+                    'category_name' => $categoryName,
+                    'created_at' => now()
+                ]);
+                
+                $categoryId = $newCategoryId;
+                $categoryMap[strtolower($categoryName)] = $categoryId;
+            }
+            
+            // Kiểm tra xem event đã tồn tại chưa
+            $existingEvent = DB::table('events')
+                ->whereRaw("UPPER(event_name) = UPPER('$eventName')")
+                ->whereRaw("DATE(event_date) = DATE('$eventDate')")
+                ->whereRaw('deleted_at is NULL')
+                ->first();
+            
+            if ($existingEvent) {
+                if ($updateExisting) {
+                    // Cập nhật event hiện có
+                    $eventController = new EventsController();
+                    $path = $existingEvent['path'];
+                    
+                    // Tạo thư mục mới nếu cần
+                    if (empty($path)) {
+                        $path = $eventController->createNewEventFolder([
+                            'event_name' => $eventName,
+                            'event_date' => $eventDate
+                        ]);
+                    }
+                    
+                    // Cập nhật description file
+                    $eventController->writeDescriptionFile($path, $description);
+                    
+                    // Cập nhật database
+                    Event::update(['id' => $existingEvent['id']], [
+                        'event_name' => $eventName,
+                        'event_date' => $eventDate,
+                        'category_id' => $categoryId,
+                        'description' => $description,
+                        'is_big_event' => $isBigEvent,
+                        'path' => $path,
+                        'update_by' => Auth::name(),
+                        'updated_at' => now()
+                    ])->save();
+                    
+                    $eventMap[$eventName . '_' . $eventDate] = $existingEvent['id'];
+                    $stats['updated']++;
+                } else {
+                    // Bỏ qua nếu không cập nhật
+                    $eventMap[$eventName . '_' . $eventDate] = $existingEvent['id'];
+                    $stats['skipped']++;
+                }
+            } else {
+                // Tạo event mới
+                $eventController = new EventsController();
+                
+                // Tạo thư mục mới
+                $path = $eventController->createNewEventFolder([
+                    'event_name' => $eventName,
+                    'event_date' => $eventDate
+                ]);
+                
+                // Tạo description file
+                $eventController->writeDescriptionFile($path, $description);
+                
+                // Lấy ID mới
+                $maxId = Event::db()->selectRaw('COALESCE(MAX(id) + 1, 1) as max_id')->first()['max_id'];
+                
+                // Lưu vào database
+                $newEvent = [
+                    'id' => $maxId,
+                    'event_name' => $eventName,
+                    'event_date' => $eventDate,
+                    'category_id' => $categoryId,
+                    'description' => $description,
+                    'is_big_event' => $isBigEvent,
+                    'path' => $path,
+                    'create_by' => Auth::name(),
+                    'created_at' => now()
+                ];
+                
+                Event::store($newEvent)->save();
+                
+                $eventMap[$eventName . '_' . $eventDate] = $maxId;
+                $stats['inserted']++;
+            }
+        }
+        
+        // Xử lý sheet Event Media
+        if ($spreadsheet->getSheetCount() > 1) {
+            $mediaSheet = $spreadsheet->getSheet(1);
+            $mediaData = $mediaSheet->toArray();
+            
+            // Lấy header của sheet Event Media
+            $mediaHeader = $mediaData[0];
+            
+            // Map index của các cột
+            $eventIdIndex = array_search('Event ID', $mediaHeader);
+            $eventNameIndex = array_search('Tên Sự Kiện', $mediaHeader);
+            $eventDateIndex = array_search('Ngày Sự Kiện', $mediaHeader);
+            $filePathIndex = array_search('Đường dẫn file', $mediaHeader);
+            $isShowIndex = array_search('Hiển thị', $mediaHeader);
+            $orderIndex = array_search('Thứ tự', $mediaHeader);
+            
+            // Đọc dữ liệu media (bỏ qua header)
+            for ($i = 1; $i < count($mediaData); $i++) {
+                $row = $mediaData[$i];
+                
+                // Bỏ qua hàng trống
+                if (empty($row[$filePathIndex])) {
+                    continue;
+                }
+                
+                // Xác định event_id
+                $eventId = null;
+                
+                if (!empty($row[$eventIdIndex])) {
+                    // Nếu có trực tiếp event_id
+                    $eventId = $row[$eventIdIndex];
+                } elseif (!empty($row[$eventNameIndex]) && !empty($row[$eventDateIndex])) {
+                    // Nếu có event_name và event_date
+                    $eventName = $row[$eventNameIndex];
+                    $eventDate = $row[$eventDateIndex];
+                    $eventId = $eventMap[$eventName . '_' . $eventDate] ?? null;
+                }
+                
+                // Bỏ qua nếu không có event_id hợp lệ
+                if (!$eventId) {
+                    continue;
+                }
+                
+                $filePath = $row[$filePathIndex];
+                $isShow = $row[$isShowIndex] ?? 1;
+                $order = $row[$orderIndex] ?? 0;
+                
+                // Kiểm tra xem media đã tồn tại chưa
+                $existingMedia = DB::table('event_media')
+                    ->where('event_id', $eventId)
+                    ->where('file_path', $filePath)
+                    ->whereRaw('deleted_at is NULL')
+                    ->first();
+                
+                if ($existingMedia) {
+                    // Cập nhật media hiện có
+                    EventMedia::update(['media_id' => $existingMedia['media_id']], [
+                        'is_show' => $isShow,
+                        'order' => $order,
+                        'media_name' => $order,
+                        'updated_at' => now()
+                    ])->save();
+                } else {
+                    // Thêm media mới
+                    $newMedia = [
+                        'event_id' => $eventId,
+                        'file_path' => $filePath,
+                        'is_show' => $isShow,
+                        'order' => $order,
+                        'created_at' => now()
+                    ];
+                    
+                    EventMedia::store($newMedia)->save();
+                    $stats['media']++;
+                }
+            }
+        }
+        
+        return $stats;
+    }
+    
+    /**
+     * Tạo file template cho import
+     */
+    public function downloadImportTemplate()
+    {
+        // Kiểm tra quyền truy cập
+        if (!Auth::user()) {
+            return $this->jsonResponse(['message' => 'Unauthorized'], 401);
+        }
+        
+        // Tạo workbook mới
+        $spreadsheet = new Spreadsheet();
+        
+        // Tạo sheet Events
+        $eventsSheet = $spreadsheet->getActiveSheet();
+        $eventsSheet->setTitle('Events');
+        
+        // Thêm header cho sheet Events
+        $eventsSheet->setCellValue('A1', 'Tên Sự Kiện');
+        $eventsSheet->setCellValue('B1', 'Ngày Sự Kiện');
+        $eventsSheet->setCellValue('C1', 'Loại Sự Kiện');
+        $eventsSheet->setCellValue('D1', 'Mô tả');
+        $eventsSheet->setCellValue('E1', 'Sự kiện lớn');
+        
+        // Thêm dữ liệu mẫu
+        $eventsSheet->setCellValue('A2', 'Sự kiện mẫu 1');
+        $eventsSheet->setCellValue('B2', date('Y-m-d'));
+        $eventsSheet->setCellValue('C2', 'Hội nghị');
+        $eventsSheet->setCellValue('D2', 'Mô tả sự kiện mẫu');
+        $eventsSheet->setCellValue('E2', '0');
+        
+        // Tạo sheet Event Media
+        $mediaSheet = $spreadsheet->createSheet();
+        $mediaSheet->setTitle('Event Media');
+        
+        // Thêm header cho sheet Event Media
+        $mediaSheet->setCellValue('A1', 'Event ID');
+        $mediaSheet->setCellValue('B1', 'Tên Sự Kiện');
+        $mediaSheet->setCellValue('C1', 'Ngày Sự Kiện');
+        $mediaSheet->setCellValue('D1', 'Đường dẫn file');
+        $mediaSheet->setCellValue('E1', 'Hiển thị');
+        $mediaSheet->setCellValue('F1', 'Thứ tự');
+        
+        // Thêm dữ liệu mẫu
+        $mediaSheet->setCellValue('A2', '');
+        $mediaSheet->setCellValue('B2', 'Sự kiện mẫu 1');
+        $mediaSheet->setCellValue('C2', date('Y-m-d'));
+        $mediaSheet->setCellValue('D2', '/assets/uploads/example.jpg');
+        $mediaSheet->setCellValue('E2', '1');
+        $mediaSheet->setCellValue('F2', '1');
+        
+        // Thêm hướng dẫn
+        $instructionSheet = $spreadsheet->createSheet();
+        $instructionSheet->setTitle('Hướng dẫn');
+        
+        $instructionSheet->setCellValue('A1', 'Hướng dẫn Import Excel');
+        $instructionSheet->setCellValue('A3', '1. Sheet Events:');
+        $instructionSheet->setCellValue('A4', '- Tên Sự Kiện: Tên của sự kiện (bắt buộc)');
+        $instructionSheet->setCellValue('A5', '- Ngày Sự Kiện: Ngày diễn ra sự kiện, định dạng YYYY-MM-DD (bắt buộc)');
+        $instructionSheet->setCellValue('A6', '- Loại Sự Kiện: Tên loại sự kiện (bắt buộc)');
+        $instructionSheet->setCellValue('A7', '- Mô tả: Mô tả chi tiết về sự kiện (bắt buộc)');
+        $instructionSheet->setCellValue('A8', '- Sự kiện lớn: 1 = Có, 0 = Không (mặc định = 0)');
+        
+        $instructionSheet->setCellValue('A10', '2. Sheet Event Media:');
+        $instructionSheet->setCellValue('A11', '- Event ID: ID của sự kiện (nếu biết)');
+        $instructionSheet->setCellValue('A12', '- Tên Sự Kiện: Tên sự kiện (dùng khi không biết Event ID)');
+        $instructionSheet->setCellValue('A13', '- Ngày Sự Kiện: Ngày sự kiện (dùng khi không biết Event ID)');
+        $instructionSheet->setCellValue('A14', '- Đường dẫn file: Đường dẫn đến file media (bắt buộc)');
+        $instructionSheet->setCellValue('A15', '- Hiển thị: 1 = Hiển thị, 0 = Ẩn (mặc định = 1)');
+        $instructionSheet->setCellValue('A16', '- Thứ tự: Số thứ tự hiển thị (mặc định = 0)');
+        
+        $instructionSheet->setCellValue('A18', 'Lưu ý:');
+        $instructionSheet->setCellValue('A19', '- Các cột bắt buộc phải có dữ liệu');
+        $instructionSheet->setCellValue('A20', '- Đường dẫn file phải là đường dẫn hợp lệ trong hệ thống');
+        $instructionSheet->setCellValue('A21', '- Nếu một sự kiện đã tồn tại (trùng tên và ngày), nó sẽ được cập nhật nếu bạn chọn "Cập nhật dữ liệu nếu đã tồn tại"');
+        
+        // Auto-size columns
+        foreach (range('A', 'F') as $col) {
+            $eventsSheet->getColumnDimension($col)->setAutoSize(true);
+            $mediaSheet->getColumnDimension($col)->setAutoSize(true);
+            $instructionSheet->getColumnDimension($col)->setAutoSize(true);
+        }
+        
+        // Thiết lập response headers
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment;filename="Events_Import_Template.xlsx"');
+        header('Cache-Control: max-age=0');
+        
+        // Tạo writer và ghi file
+        $writer = new Xlsx($spreadsheet);
+        $writer->save('php://output');
+        exit;
+    }
+    
+    /**
+     * Trả về response dạng JSON
+     */
+    private function jsonResponse($data, $statusCode = 200)
+    {
+        http_response_code($statusCode);
+        header('Content-Type: application/json');
+        echo json_encode($data, JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+}
+</file>
+
+<file path="Controllers/MediaOptimizeController.php">
+<?php
+
+namespace Controllers;
+
+use Core\DB;
+use Core\Auth;
+use Dotenv\Dotenv;
+use Exception;
+use Intervention\Image\ImageManager;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
+use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
+
+class MediaOptimizeController
+{
+    private $sourceFolder;
+    private $imageExtensions;
+    private $manager;
+    private $processedCount;
+    private $errorCount;
+    private $table = 'event_media';
+
+    // Batch processing configuration
+    private $batchSize = 10;
+    private $delayBetweenBatches = 1; // seconds
+    private $maxExecutionTime = 300; // 5 minutes
+    private $maxMemoryUsage = 512 * 1024 * 1024; // 512MB
+    private $startTime;
+    
+    // Phase-specific configurations
+    private $phase1BatchSize = 5; // Smaller batch for image processing
+    private $phase1MaxExecutionTime = 1800; // 30 minutes for phase 1
+    private $phase2BatchSize = 20; // Larger batch for file rename
+
+    // Logging
+    private $logs = [];
+    private $enableLogging = true;
+    private $logFile;
+    
+    // Phase 2 path reduction configuration
+    private $phase2PathReductionLevel = 'keep_directory'; // Options: 'keep_directory', 'filename_only', 'minimal_path', 'preserve_structure'
+
+    public function __construct()
+    {
+        // Fixed path construction - removed extra slash
+        $this->sourceFolder = __DIR__ . "/../../data/Events";
+        $this->imageExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "jfif"];
+        $this->startTime = time();
+        $this->logFile = __DIR__ . "/../../logs/media_optimize_" . date('Y-m-d') . ".log";
+
+        // Initialize Intervention Image
+        if (extension_loaded('imagick')) {
+            $this->manager = new ImageManager(new ImagickDriver());
+            $this->log("Using ImageMagick driver");
+        } else {
+            $this->manager = new ImageManager(new GdDriver());
+            $this->log("Using GD driver");
+        }
+
+        $this->processedCount = 0;
+        $this->errorCount = 0;
+
+        // Ensure logs directory exists
+        $this->ensureLogsDirectory();
+    }
+
+    /**
+     * Set phase-specific configuration
+     */
+    private function setPhaseConfiguration($phase)
+    {
+        switch ($phase) {
+            case 'phase1':
+                // Phase 1: Image processing needs more time and memory
+                $this->maxExecutionTime = $this->phase1MaxExecutionTime;
+                $this->maxMemoryUsage = 1024 * 1024 * 1024; // 1GB for image processing
+                $this->delayBetweenBatches = 2; // Longer delay for heavy processing
+                ini_set('max_execution_time', $this->phase1MaxExecutionTime);
+                ini_set('memory_limit', '1024M');
+                $this->log("PHASE 1 CONFIG: Max execution time: {$this->maxExecutionTime}s, Memory: 1GB, Batch size: {$this->phase1BatchSize}");
+                break;
+                
+            case 'phase2':
+                // Phase 2: File operations are faster
+                $this->maxExecutionTime = 600; // 10 minutes should be enough
+                $this->maxMemoryUsage = 256 * 1024 * 1024; // 256MB
+                $this->delayBetweenBatches = 0.5; // Shorter delay for light processing
+                ini_set('max_execution_time', 600);
+                ini_set('memory_limit', '256M');
+                $this->log("PHASE 2 CONFIG: Max execution time: 600s, Memory: 256MB, Batch size: {$this->phase2BatchSize}");
+                break;
+                
+            default:
+                // Combined mode: Use original settings
+                ini_set('max_execution_time', $this->maxExecutionTime);
+                ini_set('memory_limit', '512M');
+                $this->log("COMBINED CONFIG: Max execution time: {$this->maxExecutionTime}s, Memory: 512MB, Batch size: {$this->batchSize}");
+        }
+        
+        // Reset start time for the new configuration
+        $this->startTime = time();
+    }
+
+    /**
+     * Optimize all files with batch processing - Combined mode (backward compatibility)
+     */
+    public function optimizeAll($batchSize = null, $offset = 0, $forceAll = false, $startFromMediaId = null)
+    {
+        return $this->optimizeBatch($batchSize, $offset, 'combined', $startFromMediaId);
+    }
+
+    /**
+     * PHASE 1: Optimize image quality for all files
+     */
+    public function optimizeAllPhase1($batchSize = null, $offset = 0, $startFromMediaId = null)
+    {
+        return $this->optimizeBatch($batchSize, $offset, 'phase1', $startFromMediaId);
+    }
+
+    /**
+     * PHASE 2: Rename files and update database for all files
+     */
+    public function optimizeAllPhase2($batchSize = null, $offset = 0, $startFromMediaId = null)
+    {
+        return $this->optimizeBatch($batchSize, $offset, 'phase2', $startFromMediaId);
+    }
+
+    /**
+     * Generic batch optimizer with phase selection
+     */
+    private function optimizeBatch($batchSize = null, $offset = 0, $phase = 'combined', $startFromMediaId = null)
+    {
+        try {
+            // Set phase-specific configurations
+            $this->setPhaseConfiguration($phase);
+            
+            // Use phase-specific batch size if not specified
+            if ($batchSize === null) {
+                switch ($phase) {
+                    case 'phase1':
+                        $batchSize = $this->phase1BatchSize;
+                        break;
+                    case 'phase2':
+                        $batchSize = $this->phase2BatchSize;
+                        break;
+                    default:
+                        $batchSize = $this->batchSize;
+                }
+            }
+
+            // Check if source folder exists
+            if (!file_exists($this->sourceFolder) || !is_dir($this->sourceFolder)) {
+                throw new Exception("Source folder does not exist: {$this->sourceFolder}");
+            }
+
+            // Build query with optional media_id filter
+            $query = DB::table($this->table)->whereRaw('deleted_at is NULL');
+            
+            if ($startFromMediaId !== null) {
+                $idField = 'media_id'; // Assume media_id field exists
+                $query = $query->whereRaw("{$idField} >= {$startFromMediaId}");
+                $this->log("Filtering records with {$idField} >= {$startFromMediaId}");
+            }
+            
+            // Get total count with better error handling
+            $totalResult = $query->selectRaw("count(1) as total")->get();
+            if (empty($totalResult) || !isset($totalResult[0]['total'])) {
+                throw new Exception("Could not get total record count from database");
+            }
+            $totalRecords = (int)$totalResult[0]["total"];
+            $this->log("Total records in database (with filters): {$totalRecords}");
+
+            if ($offset >= $totalRecords) {
+                return $this->buildResponse(true, "All batches completed", [
+                    'total_processed' => $this->processedCount,
+                    'completed' => true
+                ]);
+            }
+
+            // Get current batch with same filters
+            $batchQuery = DB::table($this->table)->whereRaw('deleted_at is NULL');
+            
+            if ($startFromMediaId !== null) {
+                $batchQuery = $batchQuery->whereRaw("{$idField} >= {$startFromMediaId}");
+            }
+            
+            $mediaRecords = $batchQuery->limit($batchSize)->offset($offset)->get();
+
+            if (empty($mediaRecords)) {
+                return $this->buildResponse(true, "No more records to process", [
+                    'completed' => true
+                ]);
+            }
+
+            $this->log("Processing batch ({$phase}): offset {$offset}, size " . count($mediaRecords));
+
+            // Process batch based on phase
+            switch ($phase) {
+                case 'phase1':
+                    $batchResults = $this->processBatchPhase1($mediaRecords);
+                    break;
+                case 'phase2':
+                    $batchResults = $this->processBatchPhase2($mediaRecords);
+                    break;
+                default:
+                    $batchResults = $this->processBatch($mediaRecords);
+            }
+
+            // Cleanup memory
+            $this->cleanupMemory();
+
+            // Check limits
+            $this->checkLimits();
+
+            $hasMore = ($offset + $batchSize) < $totalRecords;
+
+            return $this->buildResponse(true, "Batch completed successfully", [
+                'phase' => $phase,
+                'batch_completed' => true,
+                'processed_in_batch' => $batchResults['processed'],
+                'errors_in_batch' => $batchResults['errors'],
+                'next_offset' => $offset + $batchSize,
+                'has_more' => $hasMore,
+                'total_records' => $totalRecords,
+                'progress_percentage' => round((($offset + $batchSize) / $totalRecords) * 100, 2),
+                'logs' => $this->logs
+            ]);
+        } catch (Exception $e) {
+            $this->log("ERROR in optimizeBatch ({$phase}): " . $e->getMessage());
+            return $this->buildResponse(false, $e->getMessage());
+        }
+    }
+
+    /**
+     * Process a batch of files - Combined (backward compatibility)
+     */
+    private function processBatch($mediaRecords)
+    {
+        $batchProcessed = 0;
+        $batchErrors = 0;
+
+        foreach ($mediaRecords as $record) {
+            try {
+                $this->checkLimits(); // Check before each file
+
+                $result = $this->processSingleFile($record);
+
+                if ($result['success']) {
+                    $batchProcessed++;
+                    $this->processedCount++;
+                } else {
+                    $batchErrors++;
+                    $this->errorCount++;
+                }
+
+                // Memory cleanup every 5 files
+                if (($batchProcessed + $batchErrors) % 5 === 0) {
+                    $this->cleanupMemory();
+                }
+            } catch (Exception $e) {
+                $batchErrors++;
+                $this->errorCount++;
+                $mediaName = isset($record['media_name']) ? $record['media_name'] : 'unknown';
+                $this->log("Error processing file {$mediaName}: " . $e->getMessage());
+            }
+        }
+
+        return [
+            'processed' => $batchProcessed,
+            'errors' => $batchErrors
+        ];
+    }
+
+    /**
+     * Process a batch of files - PHASE 1: Image optimization only
+     */
+    private function processBatchPhase1($mediaRecords)
+    {
+        $batchProcessed = 0;
+        $batchErrors = 0;
+
+        foreach ($mediaRecords as $record) {
+            try {
+                $this->checkLimits(); // Check before each file
+
+                $result = $this->processSingleFilePhase1($record);
+
+                if ($result['success']) {
+                    $batchProcessed++;
+                    $this->processedCount++;
+                } else {
+                    $batchErrors++;
+                    $this->errorCount++;
+                }
+
+                // Memory cleanup every 5 files
+                if (($batchProcessed + $batchErrors) % 5 === 0) {
+                    $this->cleanupMemory();
+                }
+            } catch (Exception $e) {
+                $batchErrors++;
+                $this->errorCount++;
+                $mediaName = isset($record['media_name']) ? $record['media_name'] : 'unknown';
+                $this->log("PHASE 1 - Error processing file {$mediaName}: " . $e->getMessage());
+            }
+        }
+
+        return [
+            'processed' => $batchProcessed,
+            'errors' => $batchErrors
+        ];
+    }
+
+    /**
+     * Process a batch of files - PHASE 2: File rename and database update only
+     */
+    private function processBatchPhase2($mediaRecords)
+    {
+        $batchProcessed = 0;
+        $batchErrors = 0;
+
+        foreach ($mediaRecords as $record) {
+            try {
+                $this->checkLimits(); // Check before each file
+
+                $result = $this->processSingleFilePhase2($record);
+
+                if ($result['success']) {
+                    $batchProcessed++;
+                    $this->processedCount++;
+                } else {
+                    $batchErrors++;
+                    $this->errorCount++;
+                }
+
+                // Memory cleanup every 5 files
+                if (($batchProcessed + $batchErrors) % 5 === 0) {
+                    $this->cleanupMemory();
+                }
+            } catch (Exception $e) {
+                $batchErrors++;
+                $this->errorCount++;
+                $mediaName = isset($record['media_name']) ? $record['media_name'] : 'unknown';
+                $this->log("PHASE 2 - Error processing file {$mediaName}: " . $e->getMessage());
+            }
+        }
+
+        return [
+            'processed' => $batchProcessed,
+            'errors' => $batchErrors
+        ];
+    }
+
+    /**
+     * Process a single file - PHASE 1: Image quality optimization only
+     * Target: Keep images between 500KB and 1MB for optimal quality
+     */
+    private function processSingleFilePhase1($record)
+    {
+        try {
+            $filePath = $this->resolveFilePath($record);
+            if (!$filePath) {
+                return ['success' => false, 'message' => 'File not found'];
+            }
+
+            $fileSize = filesize($filePath);
+            $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+            $isImage = in_array($extension, $this->imageExtensions);
+
+            $this->log("PHASE 1 - Processing: {$record['file_path']} ({$this->formatBytes($fileSize)})");
+
+            // Skip if not an image
+            if (!$isImage) {
+                $this->log("PHASE 1 - Skipped: Not an image file");
+                return ['success' => true, 'message' => 'Phase 1 completed successfully (not an image)'];
+            }
+
+            // Skip if original file is smaller than 500KB - we don't want to process small files
+            if ($fileSize < 500 * 1024) {
+                $this->log("PHASE 1 - Skipped: Original file is too small ({$this->formatBytes($fileSize)} < 500KB) - preserving original quality");
+                return ['success' => true, 'message' => 'Phase 1 completed successfully (original too small, preserved)'];
+            }
+
+            // Skip if file is already in optimal range (500KB - 1MB)
+            if ($fileSize >= 500 * 1024 && $fileSize <= 1024 * 1024) {
+                $this->log("PHASE 1 - Skipped: File already in optimal size range ({$this->formatBytes($fileSize)} between 500KB-1MB)");
+                return ['success' => true, 'message' => 'Phase 1 completed successfully (already in optimal range)'];
+            }
+
+            // Only optimize if file is larger than 1MB
+            if ($fileSize > 1024 * 1024) {
+                $originalSize = $fileSize;
+                $result = $this->optimizeImageToTargetRange($filePath, $filePath, $extension);
+                
+                if ($result['success']) {
+                    $newSize = filesize($filePath);
+                    $savedBytes = $originalSize - $newSize;
+                    $this->log("PHASE 1 - Optimized: {$record['file_path']} -> {$this->formatBytes($newSize)} (saved " .
+                        $this->formatBytes($savedBytes) . ") Target range: 500KB-1MB");
+                } else {
+                    $this->log("PHASE 1 - Optimization failed: {$record['file_path']} - {$result['message']}");
+                    return ['success' => false, 'message' => $result['message']];
+                }
+            }
+
+            return ['success' => true, 'message' => 'Phase 1 completed successfully'];
+        } catch (Exception $e) {
+            $mediaName = isset($record['media_name']) ? $record['media_name'] : 'unknown';
+            $this->log("PHASE 1 - ERROR processing {$mediaName}: " . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Process a single file - PHASE 2: Filename rename and database update only
+     * Implements strict transaction logic with comprehensive validation
+     */
+    private function processSingleFilePhase2($record)
+    {
+        $mediaName = isset($record['media_name']) ? $record['media_name'] : 'unknown';
+        $recordId = isset($record['media_id']) ? $record['media_id'] : (isset($record['id']) ? $record['id'] : 'unknown');
+        
+        try {
+            // Validate record has required fields
+            if (empty($record['file_path'])) {
+                $this->log("PHASE 2 - ERROR: Missing file_path in record ID: {$recordId}");
+                return ['success' => false, 'message' => 'Missing file_path in record'];
+            }
+
+            if (empty($record['media_name'])) {
+                $this->log("PHASE 2 - ERROR: Missing media_name in record ID: {$recordId}");
+                return ['success' => false, 'message' => 'Missing media_name in record'];
+            }
+
+            // Resolve file path with validation
+            $filePath = $this->resolveFilePath($record);
+            if (!$filePath) {
+                $this->log("PHASE 2 - ERROR: Could not resolve file path for: {$record['file_path']}");
+                return ['success' => false, 'message' => 'File not found'];
+            }
+
+            // Validate file is readable/writable
+            if (!is_readable($filePath)) {
+                $this->log("PHASE 2 - ERROR: File not readable: {$filePath}");
+                return ['success' => false, 'message' => 'File not readable'];
+            }
+
+            if (!is_writable($filePath)) {
+                $this->log("PHASE 2 - ERROR: File not writable: {$filePath}");
+                return ['success' => false, 'message' => 'File not writable'];
+            }
+
+            $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+            
+            $this->log("PHASE 2 - Processing: {$record['file_path']} (ID: {$recordId}, Media: {$mediaName})");
+
+            // Attempt file rename and database update with comprehensive error handling
+            $renameResult = $this->handleFileRename($record, $filePath, $extension);
+            
+            if ($renameResult['success']) {
+                $this->log("PHASE 2 - SUCCESS: {$record['file_path']} completed successfully");
+                return ['success' => true, 'message' => 'Phase 2 completed successfully'];
+            } else {
+                // Check if this was a critical error requiring manual intervention
+                if (strpos($renameResult['message'], 'CRITICAL ERROR') !== false) {
+                    $this->log("PHASE 2 - CRITICAL: {$record['file_path']} - {$renameResult['message']}");
+                    // For critical errors, we should probably stop processing or alert admin
+                    return ['success' => false, 'message' => $renameResult['message'], 'critical' => true];
+                } else {
+                    $this->log("PHASE 2 - FAILED: {$record['file_path']} - {$renameResult['message']}");
+                    return ['success' => false, 'message' => $renameResult['message']];
+                }
+            }
+
+        } catch (Exception $e) {
+            $this->log("PHASE 2 - EXCEPTION processing {$mediaName} (ID: {$recordId}): " . $e->getMessage());
+            $this->log("PHASE 2 - EXCEPTION stack trace: " . $e->getTraceAsString());
+            return ['success' => false, 'message' => 'Unexpected error: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * Process a single file - Combined (backward compatibility)
+     */
+    private function processSingleFile($record)
+    {
+        try {
+            $filePath = $this->resolveFilePath($record);
+            if (!$filePath) {
+                return ['success' => false, 'message' => 'File not found'];
+            }
+
+            $fileSize = filesize($filePath);
+            $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+            $isImage = in_array($extension, $this->imageExtensions);
+
+            $this->log("Processing: {$record['file_path']} ({$this->formatBytes($fileSize)})");
+
+            // Phase 1: Optimize image if needed
+            if ($isImage && $fileSize > 600 * 1024) {
+                $this->optimizeImage($filePath, $filePath, $extension);
+                $newSize = filesize($filePath);
+                $savedBytes = $fileSize - $newSize;
+                $this->log("Optimized: {$record['file_path']} -> {$this->formatBytes($newSize)} (saved " .
+                    $this->formatBytes($savedBytes) . ")");
+            } else if ($isImage) {
+                $this->log("Skipped optimization: File size {$this->formatBytes($fileSize)} is already within acceptable range");
+            }
+
+            // Phase 2: Rename file if needed
+            $this->handleFileRename($record, $filePath, $extension);
+
+            return ['success' => true, 'message' => 'Processed successfully'];
+        } catch (Exception $e) {
+            $mediaName = isset($record['media_name']) ? $record['media_name'] : 'unknown';
+            $this->log("ERROR processing {$mediaName}: " . $e->getMessage());
+            return ['success' => false, 'message' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * Set Phase 2 path reduction level
+     * @param string $level Options: 'filename_only', 'minimal_path', 'preserve_structure'
+     */
+    public function setPhase2PathReductionLevel($level)
+    {
+        $validLevels = ['keep_directory', 'filename_only', 'minimal_path', 'preserve_structure'];
+        if (in_array($level, $validLevels)) {
+            $this->phase2PathReductionLevel = $level;
+            $this->log("PHASE 2 - Path reduction level set to: {$level}");
+        } else {
+            $this->log("PHASE 2 - WARNING: Invalid path reduction level '{$level}', keeping current: {$this->phase2PathReductionLevel}");
+        }
+    }
+
+    /**
+     * Calculate relative path for Phase 2 - keeps original directory structure, only changes filename
+     * Handles both absolute and relative paths from database
+     */
+    private function calculatePhase2RelativePath($fullFilePath, $originalDbPath = null)
+    {
+        $this->log("PHASE 2 - Calculating relative path for: {$fullFilePath}");
+        $this->log("PHASE 2 - Original DB path: {$originalDbPath}");
+        
+        // If we have original DB path, keep its directory structure and only change filename
+        if ($originalDbPath) {
+            $newFilename = basename($fullFilePath);
+            $originalDirectory = dirname($originalDbPath);
+            
+            // Ensure original directory starts with /data/Events format
+            if (strpos($originalDirectory, '/data/Events') === 0) {
+                $result = $originalDirectory . '/' . $newFilename;
+                $this->log("PHASE 2 - Keeping original directory structure: {$originalDbPath} -> {$result}");
+                return $result;
+            }
+        }
+        
+        // Fallback: Extract the path from /data/Events onwards
+        $pathFromDataEvents = $this->extractPathFromDataEvents($fullFilePath);
+        
+        switch ($this->phase2PathReductionLevel) {
+            case 'keep_directory':
+                // Default: Keep original directory structure, only change filename
+                if ($originalDbPath) {
+                    $newFilename = basename($fullFilePath);
+                    $originalDirectory = dirname($originalDbPath);
+                    $result = $originalDirectory . '/' . $newFilename;
+                    $this->log("PHASE 2 - Keep directory: {$originalDbPath} -> {$result}");
+                    return $result;
+                } else {
+                    $result = $pathFromDataEvents;
+                    $this->log("PHASE 2 - Keep directory (fallback): {$pathFromDataEvents}");
+                    return $result;
+                }
+                
+            case 'filename_only':
+                // Most aggressive: Keep only filename with /data/Events/ prefix
+                $filename = basename($fullFilePath);
+                $result = "/data/Events/{$filename}";
+                $this->log("PHASE 2 - Path reduction (filename_only): {$pathFromDataEvents} -> {$result}");
+                return $result;
+                
+            case 'minimal_path':
+                // Moderate: Remove year directories but keep event folders
+                $relativePath = $this->normalizeToRelativePath($fullFilePath);
+                $pathParts = explode('/', $relativePath);
+                
+                if (count($pathParts) > 1) {
+                    // If path is like "2024/2024-01-15 Event Name/image.jpg"
+                    // Reduce to "/data/Events/2024-01-15 Event Name/image.jpg"
+                    if (preg_match('/^\d{4}$/', $pathParts[0])) {
+                        // Remove year directory
+                        array_shift($pathParts);
+                        $reducedPath = implode('/', $pathParts);
+                        $result = "/data/Events/{$reducedPath}";
+                        $this->log("PHASE 2 - Path reduction (minimal_path): {$pathFromDataEvents} -> {$result}");
+                        return $result;
+                    }
+                }
+                
+                // No year directory found, keep as is
+                $result = $pathFromDataEvents;
+                $this->log("PHASE 2 - Path reduction (minimal_path): {$pathFromDataEvents} -> {$result} (no change)");
+                return $result;
+                
+            case 'preserve_structure':
+                // Conservative: Keep full structure from /data/Events
+                $result = $pathFromDataEvents;
+                $this->log("PHASE 2 - Path reduction (preserve_structure): {$pathFromDataEvents} -> {$result} (preserved)");
+                return $result;
+                
+            default:
+                // Default: Keep original directory structure, only change filename
+                if ($originalDbPath) {
+                    $newFilename = basename($fullFilePath);
+                    $originalDirectory = dirname($originalDbPath);
+                    $result = $originalDirectory . '/' . $newFilename;
+                    $this->log("PHASE 2 - Default: Keep original directory: {$originalDbPath} -> {$result}");
+                    return $result;
+                } else {
+                    $filename = basename($fullFilePath);
+                    $result = "/data/Events/{$filename}";
+                    $this->log("PHASE 2 - Default fallback: {$pathFromDataEvents} -> {$result}");
+                    return $result;
+                }
+        }
+    }
+    
+    /**
+     * Extract path starting from /data/Events from any absolute path
+     */
+    private function extractPathFromDataEvents($fullFilePath)
+    {
+        // Normalize Windows paths to Unix paths
+        $normalizedPath = str_replace('\\', '/', $fullFilePath);
+        
+        // Find the position of "/data/Events"
+        $dataEventsPos = strpos($normalizedPath, '/data/Events');
+        
+        if ($dataEventsPos !== false) {
+            // Extract from /data/Events onwards
+            $result = substr($normalizedPath, $dataEventsPos);
+            $this->log("PHASE 2 - Extracted path from data/Events: {$fullFilePath} -> {$result}");
+            return $result;
+        }
+        
+        // If /data/Events not found, try to construct it from relative path
+        $relativePath = $this->normalizeToRelativePath($fullFilePath);
+        $result = "/data/Events/{$relativePath}";
+        $this->log("PHASE 2 - Constructed path from relative: {$fullFilePath} -> {$result}");
+        return $result;
+    }
+    
+    /**
+     * Normalize path to relative path from sourceFolder
+     * Handles both absolute and relative paths
+     */
+    private function normalizeToRelativePath($fullFilePath)
+    {
+        // Remove sourceFolder prefix if it exists
+        if (strpos($fullFilePath, $this->sourceFolder) === 0) {
+            $relativePath = str_replace($this->sourceFolder . '/', '', $fullFilePath);
+            $relativePath = ltrim($relativePath, '/');
+            return $relativePath;
+        }
+        
+        // If it's an absolute path outside sourceFolder, try to find relative part
+        $pathParts = explode('/', $fullFilePath);
+        $sourceParts = explode('/', $this->sourceFolder);
+        
+        // Find common parts and extract relative portion
+        $lastSourcePart = end($sourceParts); // Should be "Events"
+        $eventsIndex = array_search($lastSourcePart, $pathParts);
+        
+        if ($eventsIndex !== false && $eventsIndex < count($pathParts) - 1) {
+            // Extract path after "Events" directory
+            $relativeParts = array_slice($pathParts, $eventsIndex + 1);
+            $relativePath = implode('/', $relativeParts);
+            $this->log("PHASE 2 - Normalized absolute path: {$fullFilePath} -> {$relativePath}");
+            return $relativePath;
+        }
+        
+        // Fallback: just return basename
+        $basename = basename($fullFilePath);
+        $this->log("PHASE 2 - Fallback to basename: {$fullFilePath} -> {$basename}");
+        return $basename;
+    }
+
+    /**
+     * Resolve file path helper - handles both absolute and relative paths
+     */
+    private function resolveFilePath($record)
+    {
+        $dbPath = $record['file_path'];
+        $this->log("Resolving path from DB: {$dbPath}");
+        
+        // Case 1: Check if it's already an absolute path that exists
+        if (file_exists($dbPath)) {
+            $this->log("Found absolute path: {$dbPath}");
+            return $dbPath;
+        }
+        
+        // Case 2: Try as relative path from sourceFolder
+        $relativePath = $this->sourceFolder . '/' . ltrim($dbPath, '/');
+        if (file_exists($relativePath)) {
+            $this->log("Found relative path: {$relativePath}");
+            return $relativePath;
+        }
+        
+        // Case 3: Extract filename and try direct lookup in sourceFolder
+        $fileName = basename($dbPath);
+        $directPath = $this->sourceFolder . '/' . $fileName;
+        if (file_exists($directPath)) {
+            $this->log("Found direct filename path: {$directPath}");
+            return $directPath;
+        }
+        
+        // Case 4: Search in subdirectories
+        $foundPath = $this->findFileInSubdirectories($fileName);
+        if ($foundPath) {
+            $this->log("Found in subdirectory: {$foundPath}");
+            return $foundPath;
+        }
+        
+        // Case 5: Try to resolve absolute path within project structure
+        if (strpos($dbPath, $this->sourceFolder) === false) {
+            // If DB path doesn't contain sourceFolder, it might be a partial absolute path
+            $possiblePaths = [
+                $dbPath,
+                dirname($this->sourceFolder) . '/' . ltrim($dbPath, '/'),
+                dirname(dirname($this->sourceFolder)) . '/' . ltrim($dbPath, '/'),
+            ];
+            
+            foreach ($possiblePaths as $testPath) {
+                if (file_exists($testPath)) {
+                    $this->log("Found alternative absolute path: {$testPath}");
+                    return $testPath;
+                }
+            }
+        }
+        
+        $this->log("File not found: {$dbPath} (tried multiple resolution methods)");
+        return false;
+    }
+
+    /**
+     * Find file in subdirectories
+     */
+    private function findFileInSubdirectories($fileName)
+    {
+        $iterator = new \RecursiveIteratorIterator(
+            new \RecursiveDirectoryIterator($this->sourceFolder, \RecursiveDirectoryIterator::SKIP_DOTS)
+        );
+
+        foreach ($iterator as $file) {
+            if ($file->isFile() && $file->getFilename() === $fileName) {
+                return $file->getPathname();
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Handle file renaming with strict transaction logic and rollback protection
+     * Ensures data integrity by validating each step before proceeding
+     */
+    private function handleFileRename($record, $filePath, $extension)
+    {
+        $originalFileName = basename($filePath);
+        $sanitizedName = $this->sanitizeFilename($record['media_name']);
+        $newFileName = $sanitizedName . '.' . $extension;
+
+        // Step 1: Validate input parameters
+        if (!file_exists($filePath)) {
+            $this->log("PHASE 2 - ERROR: Source file does not exist: {$filePath}");
+            return ['success' => false, 'message' => 'Source file does not exist'];
+        }
+
+        if (empty($sanitizedName)) {
+            $this->log("PHASE 2 - ERROR: Could not sanitize media name: {$record['media_name']}");
+            return ['success' => false, 'message' => 'Invalid media name for sanitization'];
+        }
+
+        // Step 2: Check if rename is actually needed
+        if ($originalFileName === $newFileName) {
+            $this->log("PHASE 2 - No rename needed for: {$originalFileName}");
+            return ['success' => true, 'message' => 'No rename needed - file already has correct name'];
+        }
+
+        // Step 3: Prepare new file path and handle conflicts
+        $newFilePath = dirname($filePath) . '/' . $newFileName;
+        
+        // Handle duplicate file names
+        if (file_exists($newFilePath) && $newFilePath !== $filePath) {
+            $counter = 1;
+            $baseName = $sanitizedName;
+            
+            do {
+                $newFileName = $baseName . '_' . $counter . '.' . $extension;
+                $newFilePath = dirname($filePath) . '/' . $newFileName;
+                $counter++;
+                
+                if ($counter > 999) { // Prevent infinite loop
+                    $this->log("PHASE 2 - ERROR: Too many duplicate names for: {$originalFileName}");
+                    return ['success' => false, 'message' => 'Too many duplicate file names'];
+                }
+            } while (file_exists($newFilePath));
+            
+            $this->log("PHASE 2 - Resolved naming conflict: {$originalFileName} -> {$newFileName}");
+        }
+
+        // Step 4: Validate target directory is writable
+        $targetDir = dirname($newFilePath);
+        if (!is_writable($targetDir)) {
+            $this->log("PHASE 2 - ERROR: Target directory not writable: {$targetDir}");
+            return ['success' => false, 'message' => 'Target directory not writable'];
+        }
+
+        // Step 5: Get database identifiers before any file operations
+        $idField = isset($record['media_id']) ? 'media_id' : 'id';
+        $idValue = isset($record['media_id']) ? $record['media_id'] : $record['id'];
+        
+        if (empty($idValue)) {
+            $this->log("PHASE 2 - ERROR: No valid ID found in record");
+            return ['success' => false, 'message' => 'No valid record ID found'];
+        }
+
+        // Step 6: Verify record exists in database before file operations
+        try {
+            $existingRecord = DB::table($this->table)
+                ->whereRaw('deleted_at is NULL')
+                ->where([$idField => $idValue])
+                ->get();
+                
+            if (empty($existingRecord)) {
+                $this->log("PHASE 2 - ERROR: Record not found in database: {$idField}={$idValue}");
+                return ['success' => false, 'message' => 'Database record not found'];
+            }
+        } catch (Exception $e) {
+            $this->log("PHASE 2 - ERROR: Database verification failed: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Database verification error: ' . $e->getMessage()];
+        }
+
+        // Step 7: Attempt file rename with validation
+        $this->log("PHASE 2 - Attempting rename: {$originalFileName} -> {$newFileName}");
+        
+        if (!rename($filePath, $newFilePath)) {
+            $error = error_get_last();
+            $errorMsg = $error ? $error['message'] : 'Unknown filesystem error';
+            $this->log("PHASE 2 - ERROR: File rename failed: {$errorMsg}");
+            return ['success' => false, 'message' => 'File rename failed: ' . $errorMsg];
+        }
+
+        // Step 8: Validate file rename was successful
+        if (!file_exists($newFilePath)) {
+            $this->log("PHASE 2 - ERROR: Renamed file does not exist at target location: {$newFilePath}");
+            // Try to restore original file if possible
+            if (file_exists($filePath)) {
+                $this->log("PHASE 2 - Original file still exists, no rollback needed");
+            }
+            return ['success' => false, 'message' => 'File rename verification failed'];
+        }
+
+        if (file_exists($filePath)) {
+            $this->log("PHASE 2 - WARNING: Original file still exists after rename, cleaning up: {$filePath}");
+            unlink($filePath); // Clean up duplicate
+        }
+
+        // Step 9: Calculate new relative path for database
+        // Keep the original directory structure, only change the filename
+        $relativePath = $this->calculatePhase2RelativePath($newFilePath, $record['file_path']);
+        
+        $this->log("PHASE 2 - Path calculation: Full path: {$newFilePath} -> Relative: {$relativePath}");
+
+        // Step 10: Update database with comprehensive error handling
+        try {
+            $this->log("PHASE 2 - Updating database: {$idField}={$idValue} -> path: {$relativePath}");
+            
+            $updateResult = DB::table($this->table)
+                ->whereRaw('deleted_at is NULL')
+                ->where([$idField => $idValue])
+                ->update(['file_path' => $relativePath])
+                ->save();
+
+            if (!$updateResult) {
+                throw new Exception("Database update returned false");
+            }
+
+            // Step 11: Verify database update was successful
+            $verifyRecord = DB::table($this->table)
+                ->whereRaw('deleted_at is NULL')
+                ->where([$idField => $idValue])
+                ->get();
+
+            if (empty($verifyRecord) || $verifyRecord[0]['file_path'] !== $relativePath) {
+                throw new Exception("Database verification failed - update not reflected");
+            }
+
+            // SUCCESS: Both file rename and database update completed successfully
+            $this->log("PHASE 2 - SUCCESS: File renamed and database updated: {$originalFileName} -> {$newFileName}");
+            return ['success' => true, 'message' => 'File successfully renamed and database updated'];
+
+        } catch (Exception $e) {
+            // CRITICAL ERROR: Database update failed - ROLLBACK file rename
+            $this->log("PHASE 2 - CRITICAL ERROR: Database update failed, rolling back file rename: " . $e->getMessage());
+            
+            try {
+                // Attempt to restore original filename
+                if (rename($newFilePath, $filePath)) {
+                    $this->log("PHASE 2 - ROLLBACK SUCCESS: File restored to original name: {$originalFileName}");
+                    return ['success' => false, 'message' => 'Database update failed, file renamed back to original'];
+                } else {
+                    // DISASTER: Cannot rollback file rename
+                    $rollbackError = error_get_last();
+                    $rollbackMsg = $rollbackError ? $rollbackError['message'] : 'Unknown rollback error';
+                    $this->log("PHASE 2 - DISASTER: Cannot rollback file rename: {$rollbackMsg}");
+                    $this->log("PHASE 2 - DISASTER: File is now at: {$newFilePath} but database was not updated!");
+                    
+                    return ['success' => false, 'message' => 'CRITICAL ERROR: Database update failed and file rollback failed. Manual intervention required.'];
+                }
+            } catch (Exception $rollbackException) {
+                $this->log("PHASE 2 - DISASTER: Rollback exception: " . $rollbackException->getMessage());
+                return ['success' => false, 'message' => 'CRITICAL ERROR: Database and rollback both failed. Manual intervention required.'];
+            }
+        }
+    }
+
+    /**
+     * Optimize image to target range 500KB - 1MB for better quality
+     */
+    private function optimizeImageToTargetRange($sourcePath, $targetPath, $extension)
+    {
+        $image = null;
+        $encoded = null;
+
+        try {
+            $image = $this->manager->read($sourcePath);
+            $currentSize = filesize($sourcePath);
+            $minTargetSize = 500 * 1024; // 500KB minimum
+            $maxTargetSize = 1024 * 1024; // 1MB maximum
+            $preferredSize = 750 * 1024; // 750KB preferred (middle of range)
+
+            $this->log("Optimizing image to range 500KB-1MB: {$this->formatBytes($currentSize)} -> target: {$this->formatBytes($preferredSize)}");
+
+            $quality = 85; // Start with high quality
+            $extension = strtolower($extension);
+
+            // First attempt with high quality
+            $encoded = $this->encodeImage($image, $extension, $quality);
+            $encoded->save($targetPath);
+            $compressedSize = filesize($targetPath);
+
+            $this->log("First compression: {$this->formatBytes($compressedSize)} at quality {$quality}");
+
+            // If still too large, reduce progressively but stay above 500KB
+            if ($compressedSize > $maxTargetSize) {
+                $result = $this->iterativeCompressionToRange($image, $targetPath, $extension, $minTargetSize, $maxTargetSize);
+                if (!$result['success']) {
+                    return $result;
+                }
+            }
+            // If too small, try to increase quality (but this is rare)
+            else if ($compressedSize < $minTargetSize) {
+                $this->log("Image compressed too much ({$this->formatBytes($compressedSize)} < 500KB), trying to increase quality");
+                $result = $this->increaseQualityToMinSize($image, $targetPath, $extension, $minTargetSize);
+                if (!$result['success']) {
+                    return $result;
+                }
+            }
+
+            $finalSize = filesize($targetPath);
+            
+            // Validate final size is in acceptable range
+            if ($finalSize < $minTargetSize || $finalSize > $maxTargetSize) {
+                $this->log("WARNING: Final size {$this->formatBytes($finalSize)} outside target range 500KB-1MB");
+                // If it's still acceptable (not too far off), consider it success
+                if ($finalSize >= ($minTargetSize * 0.9) && $finalSize <= ($maxTargetSize * 1.1)) {
+                    $this->log("Final size is close enough to target range, accepting result");
+                } else {
+                    return ['success' => false, 'message' => 'Could not achieve target size range 500KB-1MB'];
+                }
+            }
+
+            $this->log("Final optimized size: {$this->formatBytes($finalSize)} (within 500KB-1MB range)");
+            return ['success' => true, 'message' => 'Successfully optimized to target range'];
+
+        } catch (Exception $e) {
+            return ['success' => false, 'message' => "Cannot optimize image: " . $e->getMessage()];
+        } finally {
+            // Cleanup memory
+            if ($image) unset($image);
+            if ($encoded) unset($encoded);
+            gc_collect_cycles();
+        }
+    }
+
+    /**
+     * Legacy method - Optimize image with memory management - Target 500KB
+     * Kept for backward compatibility
+     */
+    private function optimizeImage($sourcePath, $targetPath, $extension)
+    {
+        $image = null;
+        $encoded = null;
+
+        try {
+            $image = $this->manager->read($sourcePath);
+            $currentSize = filesize($sourcePath);
+            $targetSize = 500 * 1024; // 500KB
+
+            $this->log("Optimizing image: {$this->formatBytes($currentSize)} -> target: {$this->formatBytes($targetSize)}");
+
+            // Calculate initial compression ratio
+            $ratio = sqrt($targetSize / $currentSize);
+            $ratio = max($ratio, 0.3); // Don't reduce more than 70%
+            $ratio = min($ratio, 1.0); // Don't upscale
+
+            // Resize image if needed
+            if ($ratio < 1.0) {
+                $newWidth = (int)($image->width() * $ratio);
+                $image = $image->scale(width: $newWidth);
+                $this->log("Resized image to width: {$newWidth} (ratio: " . round($ratio, 2) . ")");
+            }
+
+            $quality = 80; // Start with good quality
+            $extension = strtolower($extension);
+
+            // First compression attempt
+            $encoded = $this->encodeImage($image, $extension, $quality);
+            $encoded->save($targetPath);
+            $compressedSize = filesize($targetPath);
+
+            $this->log("First compression: {$this->formatBytes($compressedSize)} at quality {$quality}");
+
+            // Iterative compression if still too large
+            if ($compressedSize > $targetSize && in_array($extension, ['jpg', 'jpeg', 'webp', 'jfif'])) {
+                $this->iterativeCompression($image, $targetPath, $extension, $targetSize);
+            }
+
+            $finalSize = filesize($targetPath);
+            $this->log("Final optimized size: {$this->formatBytes($finalSize)}");
+
+        } catch (Exception $e) {
+            throw new Exception("Cannot optimize image: " . $e->getMessage());
+        } finally {
+            // Cleanup memory
+            if ($image) unset($image);
+            if ($encoded) unset($encoded);
+            gc_collect_cycles();
+        }
+    }
+
+    /**
+     * Encode image based on format
+     */
+    private function encodeImage($image, $extension, $quality)
+    {
+        switch ($extension) {
+            case 'jpg':
+            case 'jpeg':
+            case 'jfif':
+                return $image->toJpeg(quality: $quality);
+            case 'png':
+                return $image->toPng();
+            case 'gif':
+                return $image->toGif();
+            case 'webp':
+                return $image->toWebp(quality: $quality);
+            default:
+                return $image->toJpeg(quality: $quality);
+        }
+    }
+
+    /**
+     * Iterative compression to stay within target range (500KB - 1MB)
+     */
+    private function iterativeCompressionToRange($image, $targetPath, $extension, $minSize, $maxSize)
+    {
+        $quality = 80; // Start with good quality for range target
+        $attempts = 0;
+        $minQuality = 60; // Don't go too low for quality preservation
+        $maxAttempts = 10;
+
+        $this->log("Starting iterative compression to range {$this->formatBytes($minSize)}-{$this->formatBytes($maxSize)} from quality {$quality}");
+
+        while (filesize($targetPath) > $maxSize && $quality > $minQuality && $attempts < $maxAttempts) {
+            $quality -= 5; // Gradual reduction to preserve quality
+            
+            $encoded = $this->encodeImage($image, $extension, $quality);
+            $encoded->save($targetPath);
+            
+            $currentSize = filesize($targetPath);
+            $this->log("Attempt " . ($attempts + 1) . ": Quality {$quality}, Size: {$this->formatBytes($currentSize)}");
+            
+            $attempts++;
+            
+            // Check if we hit the sweet spot
+            if ($currentSize >= $minSize && $currentSize <= $maxSize) {
+                $this->log("Achieved target range at quality {$quality}");
+                unset($encoded);
+                return ['success' => true, 'message' => 'Achieved target range'];
+            }
+            
+            // Cleanup
+            unset($encoded);
+        }
+
+        // If quality reduction isn't enough, try gentle resizing
+        if (filesize($targetPath) > $maxSize && $attempts < $maxAttempts) {
+            $this->log("Quality compression insufficient, trying gentle resize");
+            
+            // More conservative resize steps to preserve quality
+            $resizeSteps = [0.95, 0.9, 0.85, 0.8];
+            
+            foreach ($resizeSteps as $resizeRatio) {
+                $newWidth = (int)($image->width() * $resizeRatio);
+                $resizedImage = $image->scale(width: $newWidth);
+                
+                $encoded = $this->encodeImage($resizedImage, $extension, max($quality, 65));
+                $encoded->save($targetPath);
+                
+                $currentSize = filesize($targetPath);
+                $this->log("Resize attempt with ratio {$resizeRatio}: Width {$newWidth}, Size: {$this->formatBytes($currentSize)}");
+                
+                // Check if we're in range
+                if ($currentSize >= $minSize && $currentSize <= $maxSize) {
+                    $this->log("Achieved target range with resize ratio {$resizeRatio}");
+                    unset($resizedImage);
+                    unset($encoded);
+                    return ['success' => true, 'message' => 'Achieved target range with resize'];
+                }
+                
+                // Cleanup
+                unset($resizedImage);
+                unset($encoded);
+                
+                // Stop if we've gone below minimum size
+                if ($currentSize < $minSize) {
+                    $this->log("Size dropped below minimum, stopping resize attempts");
+                    break;
+                }
+            }
+        }
+
+        $finalSize = filesize($targetPath);
+        if ($finalSize >= $minSize && $finalSize <= $maxSize) {
+            return ['success' => true, 'message' => 'Achieved target range'];
+        } else {
+            return ['success' => false, 'message' => "Could not achieve target range, final size: {$this->formatBytes($finalSize)}"];
+        }
+    }
+
+    /**
+     * Try to increase quality if image is compressed too much (below 500KB)
+     */
+    private function increaseQualityToMinSize($image, $targetPath, $extension, $minSize)
+    {
+        $quality = 90; // Start with higher quality
+        $attempts = 0;
+        $maxQuality = 98;
+        $maxAttempts = 5;
+
+        $this->log("Trying to increase quality to reach minimum size {$this->formatBytes($minSize)}");
+
+        while (filesize($targetPath) < $minSize && $quality <= $maxQuality && $attempts < $maxAttempts) {
+            $quality += 2; // Gentle quality increase
+            
+            $encoded = $this->encodeImage($image, $extension, $quality);
+            $encoded->save($targetPath);
+            
+            $currentSize = filesize($targetPath);
+            $this->log("Quality increase attempt " . ($attempts + 1) . ": Quality {$quality}, Size: {$this->formatBytes($currentSize)}");
+            
+            $attempts++;
+            
+            // Check if we reached minimum
+            if ($currentSize >= $minSize) {
+                $this->log("Reached minimum size at quality {$quality}");
+                unset($encoded);
+                return ['success' => true, 'message' => 'Reached minimum size'];
+            }
+            
+            // Cleanup
+            unset($encoded);
+        }
+
+        $finalSize = filesize($targetPath);
+        if ($finalSize >= $minSize) {
+            return ['success' => true, 'message' => 'Reached minimum size'];
+        } else {
+            return ['success' => false, 'message' => "Could not reach minimum size, final size: {$this->formatBytes($finalSize)}"];
+        }
+    }
+
+    /**
+     * Legacy iterative compression method - kept for backward compatibility
+     */
+    private function iterativeCompression($image, $targetPath, $extension, $targetSize)
+    {
+        $quality = 70; // Start lower for second attempt
+        $attempts = 0;
+        $minQuality = 30;
+        $maxAttempts = 8;
+
+        $this->log("Starting iterative compression from quality {$quality}");
+
+        while (filesize($targetPath) > $targetSize && $quality > $minQuality && $attempts < $maxAttempts) {
+            $quality -= 8; // More gradual reduction
+            
+            $encoded = $this->encodeImage($image, $extension, $quality);
+            $encoded->save($targetPath);
+            
+            $currentSize = filesize($targetPath);
+            $this->log("Attempt " . ($attempts + 1) . ": Quality {$quality}, Size: {$this->formatBytes($currentSize)}");
+            
+            $attempts++;
+            
+            // Cleanup
+            unset($encoded);
+        }
+
+        // Final resize if still too large
+        if (filesize($targetPath) > $targetSize && $attempts < $maxAttempts) {
+            $this->log("Quality compression insufficient, trying resize");
+            
+            // Try progressive resizing
+            $resizeSteps = [0.9, 0.8, 0.7, 0.6];
+            
+            foreach ($resizeSteps as $resizeRatio) {
+                $newWidth = (int)($image->width() * $resizeRatio);
+                $resizedImage = $image->scale(width: $newWidth);
+                
+                $encoded = $this->encodeImage($resizedImage, $extension, max($quality, 40));
+                $encoded->save($targetPath);
+                
+                $currentSize = filesize($targetPath);
+                $this->log("Resize attempt with ratio {$resizeRatio}: Width {$newWidth}, Size: {$this->formatBytes($currentSize)}");
+                
+                // Cleanup
+                unset($resizedImage);
+                unset($encoded);
+                
+                if ($currentSize <= $targetSize) {
+                    break;
+                }
+            }
+        }
+    }
+
+    /**
+     * ROLLBACK PHASE 2: Restore original filenames from database backup
+     * This method helps rollback Phase 2 operations if needed
+     */
+    public function rollbackPhase2($batchSize = 20, $offset = 0, $backupDate = null)
+    {
+        try {
+            $this->log("=== STARTING PHASE 2 ROLLBACK ===");
+            
+            // If backup date not specified, try to find the most recent backup
+            if (!$backupDate) {
+                $backupDate = $this->findLatestBackupDate();
+                if (!$backupDate) {
+                    throw new Exception("No backup date specified and no backup files found");
+                }
+            }
+            
+            $this->log("ROLLBACK - Using backup from: {$backupDate}");
+            
+            // Get records that need rollback (those with current names different from original)
+            $recordsToRollback = $this->getRecordsForRollback($batchSize, $offset, $backupDate);
+            
+            if (empty($recordsToRollback)) {
+                return $this->buildResponse(true, "No more records to rollback", [
+                    'completed' => true,
+                    'rollback_completed' => true
+                ]);
+            }
+            
+            $rollbackResults = $this->processRollbackBatch($recordsToRollback);
+            
+            $hasMore = count($recordsToRollback) === $batchSize;
+            
+            return $this->buildResponse(true, "Rollback batch completed", [
+                'batch_completed' => true,
+                'processed_in_batch' => $rollbackResults['processed'],
+                'errors_in_batch' => $rollbackResults['errors'],
+                'next_offset' => $offset + $batchSize,
+                'has_more' => $hasMore,
+                'backup_date' => $backupDate,
+                'logs' => $this->logs
+            ]);
+            
+        } catch (Exception $e) {
+            $this->log("ERROR in rollbackPhase2: " . $e->getMessage());
+            return $this->buildResponse(false, $e->getMessage());
+        }
+    }
+    
+    /**
+     * Create backup of current state before Phase 2 operations
+     */
+    public function createPhase2Backup()
+    {
+        try {
+            $timestamp = date('Y-m-d_H-i-s');
+            $backupFile = __DIR__ . "/../../logs/phase2_backup_{$timestamp}.json";
+            
+            // Get all current file paths and media names
+            $records = DB::table($this->table)
+                ->whereRaw('deleted_at is NULL')
+                ->select(['media_id', 'file_path', 'media_name', 'event_id'])
+                ->get();
+            
+            $backupData = [
+                'timestamp' => $timestamp,
+                'date' => date('Y-m-d H:i:s'),
+                'total_records' => count($records),
+                'records' => $records
+            ];
+            
+            file_put_contents($backupFile, json_encode($backupData, JSON_PRETTY_PRINT));
+            
+            $this->log("BACKUP CREATED: {$backupFile} with " . count($records) . " records");
+            
+            return $this->buildResponse(true, "Backup created successfully", [
+                'backup_file' => $backupFile,
+                'backup_timestamp' => $timestamp,
+                'records_backed_up' => count($records)
+            ]);
+            
+        } catch (Exception $e) {
+            $this->log("ERROR creating backup: " . $e->getMessage());
+            return $this->buildResponse(false, "Failed to create backup: " . $e->getMessage());
+        }
+    }
+    
+    /**
+     * Find the latest backup date from backup files
+     */
+    private function findLatestBackupDate()
+    {
+        $backupDir = __DIR__ . "/../../logs/";
+        $backupFiles = glob($backupDir . "phase2_backup_*.json");
+        
+        if (empty($backupFiles)) {
+            return null;
+        }
+        
+        // Sort files by modification time (newest first)
+        usort($backupFiles, function($a, $b) {
+            return filemtime($b) - filemtime($a);
+        });
+        
+        $latestFile = $backupFiles[0];
+        $filename = basename($latestFile);
+        
+        // Extract timestamp from filename: phase2_backup_2024-01-15_14-30-25.json
+        if (preg_match('/phase2_backup_(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})\.json/', $filename, $matches)) {
+            return $matches[1];
+        }
+        
+        return null;
+    }
+    
+    /**
+     * Get records that need rollback by comparing with backup
+     */
+    private function getRecordsForRollback($batchSize, $offset, $backupDate)
+    {
+        $backupFile = __DIR__ . "/../../logs/phase2_backup_{$backupDate}.json";
+        
+        if (!file_exists($backupFile)) {
+            throw new Exception("Backup file not found: {$backupFile}");
+        }
+        
+        $backupData = json_decode(file_get_contents($backupFile), true);
+        if (!$backupData || !isset($backupData['records'])) {
+            throw new Exception("Invalid backup file format");
+        }
+        
+        $backupRecords = array_slice($backupData['records'], $offset, $batchSize);
+        $recordsToRollback = [];
+        
+        foreach ($backupRecords as $backupRecord) {
+            // Get current record from database
+            $currentRecord = DB::table($this->table)
+                ->whereRaw('deleted_at is NULL')
+                ->where(['media_id' => $backupRecord['media_id']])
+                ->get();
+            
+            if (!empty($currentRecord)) {
+                $current = $currentRecord[0];
+                
+                // Check if file_path has changed since backup
+                if ($current['file_path'] !== $backupRecord['file_path']) {
+                    $recordsToRollback[] = [
+                        'media_id' => $backupRecord['media_id'],
+                        'current_path' => $current['file_path'],
+                        'original_path' => $backupRecord['file_path'],
+                        'media_name' => $backupRecord['media_name']
+                    ];
+                }
+            }
+        }
+        
+        return $recordsToRollback;
+    }
+    
+    /**
+     * Process rollback batch - restore original filenames
+     */
+    private function processRollbackBatch($recordsToRollback)
+    {
+        $batchProcessed = 0;
+        $batchErrors = 0;
+        
+        foreach ($recordsToRollback as $record) {
+            try {
+                $result = $this->rollbackSingleRecord($record);
+                
+                if ($result['success']) {
+                    $batchProcessed++;
+                } else {
+                    $batchErrors++;
+                }
+                
+            } catch (Exception $e) {
+                $batchErrors++;
+                $this->log("ROLLBACK ERROR for media_id {$record['media_id']}: " . $e->getMessage());
+            }
+        }
+        
+        return [
+            'processed' => $batchProcessed,
+            'errors' => $batchErrors
+        ];
+    }
+    
+    /**
+     * Rollback a single record to its original filename
+     */
+    private function rollbackSingleRecord($record)
+    {
+        $mediaId = $record['media_id'];
+        $currentPath = $record['current_path'];
+        $originalPath = $record['original_path'];
+        
+        $this->log("ROLLBACK - Processing media_id {$mediaId}: {$currentPath} -> {$originalPath}");
+        
+        // Resolve current file path
+        $currentFilePath = $this->sourceFolder . '/' . ltrim($currentPath, '/');
+        $originalFilePath = $this->sourceFolder . '/' . ltrim($originalPath, '/');
+        
+        // Check if current file exists
+        if (!file_exists($currentFilePath)) {
+            $this->log("ROLLBACK WARNING - Current file not found: {$currentFilePath}");
+            // File might already be at original location, check database only
+            return $this->rollbackDatabaseOnly($mediaId, $originalPath);
+        }
+        
+        // Check if original path already exists
+        if (file_exists($originalFilePath) && $originalFilePath !== $currentFilePath) {
+            $this->log("ROLLBACK WARNING - Original path already exists: {$originalFilePath}");
+            // Handle conflict - maybe add timestamp suffix
+            $originalFilePath = $this->resolveRollbackConflict($originalFilePath);
+        }
+        
+        // Perform the rollback rename
+        if ($currentFilePath !== $originalFilePath) {
+            if (!rename($currentFilePath, $originalFilePath)) {
+                $error = error_get_last();
+                $errorMsg = $error ? $error['message'] : 'Unknown filesystem error';
+                $this->log("ROLLBACK ERROR - File rename failed: {$errorMsg}");
+                return ['success' => false, 'message' => 'File rename failed: ' . $errorMsg];
+            }
+            
+            $this->log("ROLLBACK - File renamed: {$currentFilePath} -> {$originalFilePath}");
+        }
+        
+        // Update database with original path
+        try {
+            // Use the same path calculation method as Phase 2
+            $relativePath = $this->calculatePhase2RelativePath($originalFilePath, $originalPath);
+            
+            $updateResult = DB::table($this->table)
+                ->whereRaw('deleted_at is NULL')
+                ->where(['media_id' => $mediaId])
+                ->update(['file_path' => $relativePath])
+                ->save();
+            
+            if (!$updateResult) {
+                throw new Exception("Database update returned false");
+            }
+            
+            $this->log("ROLLBACK SUCCESS - Database updated for media_id {$mediaId}");
+            return ['success' => true, 'message' => 'Rollback completed successfully'];
+            
+        } catch (Exception $e) {
+            $this->log("ROLLBACK ERROR - Database update failed: " . $e->getMessage());
+            
+            // Try to rollback the file rename if database update failed
+            if ($currentFilePath !== $originalFilePath && file_exists($originalFilePath)) {
+                if (rename($originalFilePath, $currentFilePath)) {
+                    $this->log("ROLLBACK - File restored to current location after database error");
+                }
+            }
+            
+            return ['success' => false, 'message' => 'Database rollback failed: ' . $e->getMessage()];
+        }
+    }
+    
+    /**
+     * Rollback database only (when file is already at correct location)
+     */
+    private function rollbackDatabaseOnly($mediaId, $originalPath)
+    {
+        try {
+            // Use the same path calculation method as Phase 2
+            $relativePath = $this->calculatePhase2RelativePath($originalPath, $originalPath);
+            
+            $updateResult = DB::table($this->table)
+                ->whereRaw('deleted_at is NULL')
+                ->where(['media_id' => $mediaId])
+                ->update(['file_path' => $relativePath])
+                ->save();
+            
+            if (!$updateResult) {
+                throw new Exception("Database update returned false");
+            }
+            
+            $this->log("ROLLBACK SUCCESS - Database-only rollback for media_id {$mediaId}");
+            return ['success' => true, 'message' => 'Database rollback completed'];
+            
+        } catch (Exception $e) {
+            $this->log("ROLLBACK ERROR - Database-only rollback failed: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Database rollback failed: ' . $e->getMessage()];
+        }
+    }
+    
+    /**
+     * Resolve rollback filename conflicts
+     */
+    private function resolveRollbackConflict($originalFilePath)
+    {
+        $pathInfo = pathinfo($originalFilePath);
+        $directory = $pathInfo['dirname'];
+        $filename = $pathInfo['filename'];
+        $extension = isset($pathInfo['extension']) ? '.' . $pathInfo['extension'] : '';
+        
+        $counter = 1;
+        $newPath = $originalFilePath;
+        
+        while (file_exists($newPath) && $counter <= 999) {
+            $newPath = $directory . '/' . $filename . '_rollback_' . $counter . $extension;
+            $counter++;
+        }
+        
+        if ($counter > 999) {
+            // Fallback with timestamp
+            $timestamp = date('Y-m-d_H-i-s');
+            $newPath = $directory . '/' . $filename . '_rollback_' . $timestamp . $extension;
+        }
+        
+        $this->log("ROLLBACK - Resolved conflict: {$originalFilePath} -> {$newPath}");
+        return $newPath;
+    }
+
+    /**
+     * Migrate absolute paths in database to relative paths
+     * This helps fix databases that store absolute paths
+     */
+    public function migrateAbsoluteToRelativePaths($batchSize = 50, $offset = 0, $dryRun = true)
+    {
+        try {
+            $this->log("=== STARTING PATH MIGRATION ===");
+            $this->log("Mode: " . ($dryRun ? "DRY RUN (no changes)" : "LIVE MIGRATION"));
+            
+            // Get records with absolute paths (both Unix and Windows style)
+            $records = DB::table($this->table)
+                ->whereRaw('deleted_at is NULL')
+                ->whereRaw("(file_path LIKE '/%' OR file_path LIKE 'C:%' OR file_path LIKE 'D:%' OR file_path LIKE 'E:%')") // Absolute paths
+                ->limit($batchSize)
+                ->offset($offset)
+                ->get();
+            
+            if (empty($records)) {
+                return $this->buildResponse(true, "No more absolute paths to migrate", [
+                    'completed' => true
+                ]);
+            }
+            
+            $migrated = 0;
+            $errors = 0;
+            $migrations = [];
+            
+            foreach ($records as $record) {
+                $mediaId = isset($record['media_id']) ? $record['media_id'] : $record['id'];
+                $absolutePath = $record['file_path'];
+                
+                // Check if file exists at absolute path
+                if (!file_exists($absolutePath)) {
+                    $this->log("MIGRATION - File not found at absolute path: {$absolutePath}");
+                    $errors++;
+                    continue;
+                }
+                
+                // Calculate path in /data/Events format
+                $relativePath = $this->extractPathFromDataEvents($absolutePath);
+                
+                if ($relativePath !== $absolutePath) {
+                    $migrations[] = [
+                        'media_id' => $mediaId,
+                        'old_path' => $absolutePath,
+                        'new_path' => $relativePath
+                    ];
+                    
+                    $this->log("MIGRATION - {$mediaId}: {$absolutePath} -> {$relativePath}");
+                    
+                    if (!$dryRun) {
+                        // Actually update the database
+                        $idField = isset($record['media_id']) ? 'media_id' : 'id';
+                        $updateResult = DB::table($this->table)
+                            ->whereRaw('deleted_at is NULL')
+                            ->where([$idField => $mediaId])
+                            ->update(['file_path' => $relativePath])
+                            ->save();
+                            
+                        if ($updateResult) {
+                            $migrated++;
+                        } else {
+                            $errors++;
+                            $this->log("MIGRATION - ERROR updating database for media_id: {$mediaId}");
+                        }
+                    } else {
+                        $migrated++; // Count as migrated in dry run
+                    }
+                } else {
+                    $this->log("MIGRATION - No change needed for media_id: {$mediaId}");
+                }
+            }
+            
+            $hasMore = count($records) === $batchSize;
+            
+            return $this->buildResponse(true, "Migration batch completed", [
+                'mode' => $dryRun ? 'dry_run' : 'live',
+                'batch_completed' => true,
+                'migrated_in_batch' => $migrated,
+                'errors_in_batch' => $errors,
+                'migrations' => $migrations,
+                'next_offset' => $offset + $batchSize,
+                'has_more' => $hasMore,
+                'logs' => $this->logs
+            ]);
+            
+        } catch (Exception $e) {
+            $this->log("ERROR in migrateAbsoluteToRelativePaths: " . $e->getMessage());
+            return $this->buildResponse(false, $e->getMessage());
+        }
+    }
+
+    /**
+     * Optimize a file by ID
+     */
+    public function optimizeById($id)
+    {
+        try {
+            $records = DB::table($this->table)->whereRaw('deleted_at is NULL')->whereRaw("event_id > {$id}")->get();
+            foreach ($records as $record) {
+                $result = $this->processSingleFile($record);
+                echo basename($record['file_path']) . " -- {$id} -- {$record['media_id']} \n";
+                // if ($result['success']) {
+                //     $filePath = $this->sourceFolder . '/' . ltrim($record['file_path'], '/');
+                //     echo basename($record['file_path']) . "\n";
+                // } else {
+                //     throw new Exception($result['message']);
+                // }
+            }
+            // $this->buildResponse(true, "File optimized successfully", [
+            //     'file' => basename($record['file_path']),
+            //     //'size' => file_exists($filePath) ? filesize($filePath) : 0,
+            //     'path' => $record['file_path']
+            // ]);
+        } catch (Exception $e) {
+            return $this->buildResponse(false, $e->getMessage());
+        }
+    }
+
+    /**
+     * CLI Interface
+     */
+    public function runFromCli($args, $phase = 'combined')
+    {
+        try {
+            echo "==========================================\n";
+            echo "      MEDIA OPTIMIZATION TOOL\n";
+            switch ($phase) {
+                case 'phase1':
+                    echo "         PHASE 1: IMAGE QUALITY\n";
+                    break;
+                case 'phase2':
+                    echo "         PHASE 2: FILE RENAME & DB\n";
+                    break;
+                default:
+                    echo "         COMBINED MODE\n";
+            }
+            echo "==========================================\n";
+
+            // Parse arguments
+            $options = $this->parseCliArguments($args);
+            $options['phase'] = $phase;
+
+            if (isset($options['id'])) {
+                echo "Optimizing single file with ID: {$options['id']} (Phase: {$phase})\n";
+                $result = $this->optimizeById($options['id']);
+                $this->printCliResult($result);
+            } else {
+                echo "Starting batch optimization (Phase: {$phase})...\n";
+                $this->runBatchOptimization($options);
+            }
+
+            echo "==========================================\n";
+            echo "Process completed!\n";
+            return 0;
+        } catch (Exception $e) {
+            echo "ERROR: " . $e->getMessage() . "\n";
+            return 1;
+        }
+    }
+
+    /**
+     * Run batch optimization from CLI - FIXED
+     */
+    private function runBatchOptimization($options)
+    {
+        $batchSize = $options['batch_size'] ?? $this->batchSize;
+        $phase = $options['phase'] ?? 'combined';
+        $startFromId = $options['start_from_id'] ?? null;
+        $offset = 0;
+        $totalProcessed = 0;
+        $totalErrors = 0;
+
+        // Get total count first (with media_id filter if applicable)
+        $totalQuery = DB::table($this->table)->whereRaw('deleted_at is NULL');
+        if ($startFromId !== null && $phase === 'phase2') {
+            $totalQuery = $totalQuery->whereRaw('media_id >= {$startFromId}');
+        }
+        $totalResult = $totalQuery->selectRaw("count(1) as total")->get();
+        $totalRecords = $totalResult[0]['total'] ?? 0;
+        
+        echo "Total files to process: {$totalRecords}\n";
+        echo "Batch size: {$batchSize}\n";
+        echo "Phase: {$phase}\n";
+        if ($startFromId !== null) {
+            echo "Starting from media_id: {$startFromId}\n";
+        }
+        echo "----------------------------------------\n";
+
+        while (true) {
+            echo "Processing batch starting at offset {$offset}...\n";
+
+            // Call appropriate optimization method based on phase
+            switch ($phase) {
+                case 'phase1':
+                    $result = $this->optimizeAllPhase1($batchSize, $offset, $startFromId);
+                    break;
+                case 'phase2':
+                    $result = $this->optimizeAllPhase2($batchSize, $offset, $startFromId);
+                    break;
+                default:
+                    $result = $this->optimizeAll($batchSize, $offset, false, $startFromId);
+            }
+
+            // Convert response to array if needed
+            $resultData = $this->parseResponse($result);
+
+            if ($resultData && $resultData['success']) {
+                $data = $resultData['data'] ?? [];
+                $processedInBatch = $data['processed_in_batch'] ?? 0;
+                $errorsInBatch = $data['errors_in_batch'] ?? 0;
+
+                $totalProcessed += $processedInBatch;
+                $totalErrors += $errorsInBatch;
+
+                echo "  ✓ Processed: {$processedInBatch}\n";
+                echo "  ✗ Errors: {$errorsInBatch}\n";
+                echo "  Progress: " . ($data['progress_percentage'] ?? 0) . "%\n";
+                echo "  Phase: " . ($data['phase'] ?? $phase) . "\n";
+
+                if (!($data['has_more'] ?? false)) {
+                    break;
+                }
+
+                $offset = $data['next_offset'] ?? ($offset + $batchSize);
+
+                // Delay between batches
+                if ($this->delayBetweenBatches > 0) {
+                    echo "  Waiting {$this->delayBetweenBatches}s before next batch...\n";
+                    sleep($this->delayBetweenBatches);
+                }
+            } else {
+                $message = $resultData['message'] ?? 'Unknown error';
+                echo "  ERROR: {$message}\n";
+                break;
+            }
+
+            echo "----------------------------------------\n";
+        }
+
+        echo "\nSUMMARY:\n";
+        echo "Phase: {$phase}\n";
+        echo "Total processed: {$totalProcessed}\n";
+        echo "Total errors: {$totalErrors}\n";
+        $total = $totalProcessed + $totalErrors;
+        $successRate = $total > 0 ? round(($totalProcessed / $total) * 100, 2) : 0;
+        echo "Success rate: {$successRate}%\n";
+    }
+
+    /**
+     * Parse response - handle both array and response object
+     */
+    private function parseResponse($response)
+    {
+        // If it's already an array, return it
+        if (is_array($response)) {
+            return $response;
+        }
+
+        // If it's a response object with a getContent method
+        if (is_object($response) && method_exists($response, 'getContent')) {
+            $content = $response->getContent();
+            return json_decode($content, true);
+        }
+
+        // If it's a JSON string
+        if (is_string($response)) {
+            return json_decode($response, true);
+        }
+
+        // Try to convert to string and parse
+        try {
+            $jsonString = (string)$response;
+            return json_decode($jsonString, true);
+        } catch (Exception $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Parse CLI arguments
+     */
+    private function parseCliArguments($args)
+    {
+        $options = [];
+
+        for ($i = 2; $i < count($args); $i++) {
+            if ($args[$i] === '--id' && isset($args[$i + 1])) {
+                $options['id'] = $args[$i + 1];
+                $i++; // Skip next argument
+            } elseif ($args[$i] === '--batch-size' && isset($args[$i + 1])) {
+                $options['batch_size'] = (int)$args[$i + 1];
+                $i++;
+            } elseif ($args[$i] === '--delay' && isset($args[$i + 1])) {
+                $this->delayBetweenBatches = (int)$args[$i + 1];
+                $i++;
+            } elseif ($args[$i] === '--start-from-id' && isset($args[$i + 1])) {
+                $options['start_from_id'] = (int)$args[$i + 1];
+                $i++;
+            }
+        }
+
+        return $options;
+    }
+
+    /**
+     * Print CLI result
+     */
+    private function printCliResult($result)
+    {
+        $resultData = $this->parseResponse($result);
+
+        if ($resultData && $resultData['success']) {
+            echo "✓ SUCCESS: {$resultData['message']}\n";
+            if (isset($resultData['data'])) {
+                foreach ($resultData['data'] as $key => $value) {
+                    echo "  {$key}: {$value}\n";
+                }
+            }
+        } else {
+            $message = $resultData['message'] ?? 'Unknown error';
+            echo "✗ ERROR: {$message}\n";
+        }
+    }
+
+    /**
+     * API endpoint handler
+     */
+    public function handleRequest()
+    {
+        $action = $_REQUEST['action'] ?? 'optimize_all';
+
+        switch ($action) {
+            case 'optimize_all':
+                return $this->optimizeAll();
+
+            case 'optimize_batch':
+                $batchSize = (int)($_REQUEST['batch_size'] ?? $this->batchSize);
+                $offset = (int)($_REQUEST['offset'] ?? 0);
+                return $this->optimizeAll($batchSize, $offset);
+
+            // PHASE 1 endpoints
+            case 'optimize_all_phase1':
+                return $this->optimizeAllPhase1();
+
+            case 'optimize_batch_phase1':
+                $batchSize = (int)($_REQUEST['batch_size'] ?? $this->batchSize);
+                $offset = (int)($_REQUEST['offset'] ?? 0);
+                return $this->optimizeAllPhase1($batchSize, $offset);
+
+            // PHASE 2 endpoints
+            case 'optimize_all_phase2':
+                return $this->optimizeAllPhase2();
+
+            case 'optimize_batch_phase2':
+                $batchSize = (int)($_REQUEST['batch_size'] ?? $this->batchSize);
+                $offset = (int)($_REQUEST['offset'] ?? 0);
+                return $this->optimizeAllPhase2($batchSize, $offset);
+
+            case 'optimize_by_id':
+                $id = $_REQUEST['id'] ?? null;
+                if (!$id) {
+                    return $this->buildResponse(false, 'ID is required');
+                }
+                return $this->optimizeById($id);
+
+            case 'get_total_count':
+                $total = DB::table($this->table)->whereRaw('deleted_at is NULL')->selectRaw("count(1) as total")->get()[0]["total"];
+                return $this->buildResponse(true, 'Total count retrieved', ['total' => $total]);
+
+            case 'get_status':
+                return $this->buildResponse(true, 'Service status', [
+                    'processed' => $this->processedCount,
+                    'errors' => $this->errorCount,
+                    'memory_usage' => $this->formatBytes(memory_get_usage(true)),
+                    'memory_peak' => $this->formatBytes(memory_get_peak_usage(true))
+                ]);
+
+            default:
+                return $this->buildResponse(false, 'Invalid action');
+        }
+    }
+
+    /**
+     * Utility methods
+     */
+    private function sanitizeFilename($filename)
+    {
+        $filename = preg_replace('/[\/\\\?%*:|"<>\s]/', '-', $filename);
+        $filename = preg_replace('/[^\pL\pN\-\_\.]/u', '', $filename);
+        $filename = preg_replace('/\s+/', '-', $filename);
+        $filename = preg_replace('/-+/', '-', $filename);
+        $filename = strtolower($filename);
+        $filename = trim($filename, '-');
+
+        if (empty($filename)) {
+            $filename = 'file-' . time();
+        }
+
+        return $filename;
+    }
+
+    private function formatBytes($size, $precision = 2)
+    {
+        $units = ['B', 'KB', 'MB', 'GB', 'TB'];
+
+        for ($i = 0; $size > 1024 && $i < count($units) - 1; $i++) {
+            $size /= 1024;
+        }
+
+        return round($size, $precision) . ' ' . $units[$i];
+    }
+
+    private function cleanupMemory()
+    {
+        // Force garbage collection
+        gc_collect_cycles();
+        
+        // Additional cleanup for image processing
+        if (function_exists('imagecache_clear')) {
+            //imagecache_clear();
+        }
+
+        if (function_exists('memory_get_usage')) {
+            $memUsage = memory_get_usage(true);
+            $peakMemUsage = memory_get_peak_usage(true);
+            $this->log("Memory usage after cleanup: " . $this->formatBytes($memUsage) . 
+                       " (Peak: " . $this->formatBytes($peakMemUsage) . ")");
+                       
+            // Log warning if memory usage is high
+            if ($memUsage > ($this->maxMemoryUsage * 0.8)) {
+                $this->log("WARNING: Memory usage is high (" . 
+                          $this->formatBytes($memUsage) . "/" . 
+                          $this->formatBytes($this->maxMemoryUsage) . ")");
+            }
+        }
+    }
+
+    private function checkLimits()
+    {
+        // Check execution time
+        if ((time() - $this->startTime) > $this->maxExecutionTime) {
+            throw new Exception('Execution time limit exceeded');
+        }
+
+        // Check memory usage
+        if (memory_get_usage(true) > $this->maxMemoryUsage) {
+            $this->cleanupMemory();
+
+            if (memory_get_usage(true) > $this->maxMemoryUsage) {
+                throw new Exception('Memory limit exceeded');
+            }
+        }
+    }
+
+    private function log($message)
+    {
+        if (!$this->enableLogging) return;
+
+        $timestamp = date('Y-m-d H:i:s');
+        $logEntry = "[{$timestamp}] {$message}";
+
+        $this->logs[] = $logEntry;
+
+        // Also write to file
+        if ($this->logFile) {
+            file_put_contents($this->logFile, $logEntry . "\n", FILE_APPEND | LOCK_EX);
+        }
+    }
+
+    private function ensureLogsDirectory()
+    {
+        $logDir = dirname($this->logFile);
+        if (!is_dir($logDir)) {
+            mkdir($logDir, 0755, true);
+        }
+    }
+
+    private function buildResponse($success, $message, $data = null)
+    {
+        $response = [
+            'success' => $success,
+            'message' => $message,
+            'timestamp' => date('Y-m-d H:i:s')
+        ];
+
+        if ($data !== null) {
+            $response['data'] = $data;
+        }
+
+        if (!$success || $this->errorCount > 0) {
+            $response['processed'] = $this->processedCount;
+            $response['errors'] = $this->errorCount;
+        }
+
+        // For CLI usage, return array directly instead of response object
+        if (php_sapi_name() === 'cli') {
+            return $response;
+        }
+
+        // For web usage, use the framework's response function
+        return response($response, $success ? 200 : 400);
+    }
+}
+</file>
+
+</files>
