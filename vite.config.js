@@ -13,4 +13,14 @@ export default defineConfig({
         }),
         react(),
     ],
+    resolve: {
+        alias: {
+            '@': '/resources/js',
+        },
+    },
+    server: {
+        host: '0.0.0.0',
+        port: 5173,
+        strictPort: false,
+    },
 });
