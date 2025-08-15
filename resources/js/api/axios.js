@@ -7,6 +7,10 @@ const api = axios.create({
 
 // Interceptor thêm CSRF token
 api.interceptors.request.use(config => {
+  const token = document.head.querySelector('meta[name="csrf-token"]');
+  if (token) {
+    config.headers['X-CSRF-TOKEN'] = token.content;
+  }
   config.headers['X-Requested-With'] = 'XMLHttpRequest';
   return config;
 });

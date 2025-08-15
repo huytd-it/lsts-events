@@ -10,7 +10,9 @@ const router = createBrowserRouter([
     path: "/",
     element: <Dashboard />,
     loader: () => {
-      if (!localStorage.getItem('authToken')) {
+      // Check if user is authenticated
+      const token = localStorage.getItem('authToken');
+      if (!token) {
         return redirect('/login');
       }
       return null;

@@ -7,8 +7,9 @@
 
     <title>LSTS Events Management</title>
 
+    <!-- Scripts -->
     @viteReactRefresh
-    @vite(['resources/js/app.jsx'])
+    @vite(['resources/js/app.jsx', 'resources/css/app.css'])
 </head>
 <body class="font-sans antialiased bg-gray-50">
     <div id="app"></div>

@@ -1,61 +1,148 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Qwen Code - Project Development Notes
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+## Project Overview
+This document contains notes and instructions for the Laravel + React + Vite project development.
 
-## About Laravel
+## Setup Steps Completed
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+### 1. Environment Preparation
+- Installed Laravel Installer
+- Created Laravel project with Jetstream, Livewire, and Teams
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+### 2. Backend Configuration (Laravel)
+- Configured database (MySQL)
+- Installed required packages:
+  - laravel/sanctum
+  - spatie/laravel-permission
+  - intervention/image
+  - @vitejs/plugin-react (for frontend)
+- Configured Sanctum for API authentication
+- Configured Vite for frontend integration
+- Configured CORS settings
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+### 3. Database Models & Relationships
+Created models:
+- Category
+- Event
+- EventMedia
+- CategoryUser (Pivot)
 
-## Learning Laravel
+### 4. API Resources & Controllers
+- Created CategoryResource
+- Created CategoryController
+- Configured API routes
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+### 5. Frontend Setup (React + Vite)
+- Created component structure:
+  - components/
+  - contexts/
+  - hooks/
+  - pages/
+  - routes/
+  - api/
+- Installed React libraries:
+  - @tanstack/react-query
+  - react-router-dom
+  - axios
+  - react-icons
+  - @headlessui/react
+  - @heroicons/react
+  - framer-motion
+  - react-hook-form
+  - @hookform/resolvers
+  - yup
+  - react-toastify
+  - react-dnd
+  - react-dnd-html5-backend
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+### 6. Integration
+- Configured Laravel to serve React SPA
+- Set up routing for SPA
+- Created main entry point for React app
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Running the Application
 
-## Laravel Sponsors
+### Prerequisites
+- PHP 8.1+
+- Node.js 18+
+- Composer
+- MySQL 8.0+
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+### Setup Instructions
 
-### Premium Partners
+1. **Clone the repository** (if applicable)
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+2. **Install PHP dependencies**
+   ```bash
+   composer install
+   ```
 
-## Contributing
+3. **Install Node dependencies**
+   ```bash
+   npm install
+   ```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+4. **Configure environment**
+   - Copy `.env.example` to `.env`
+   - Update database configuration in `.env`
+   - Run `php artisan key:generate`
 
-## Code of Conduct
+5. **Run database migrations and seeders**
+   ```bash
+   php artisan migrate --seed
+   ```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+6. **Start Laravel development server**
+   ```bash
+   php artisan serve
+   ```
 
-## Security Vulnerabilities
+7. **Start Vite development server** (in a separate terminal)
+   ```bash
+   npm run dev
+   ```
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+8. **Access the application**
+   Open your browser and navigate to `http://localhost:8000`
 
-## License
+## Development Workflow
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+### Backend (Laravel)
+- Models: `app/Models/`
+- Controllers: `app/Http/Controllers/`
+- Resources: `app/Http/Resources/`
+- Routes: `routes/api.php` (API) and `routes/web.php` (SPA)
+- Migrations: `database/migrations/`
+- Seeders: `database/seeders/`
+
+### Frontend (React)
+- Main entry point: `resources/js/app.jsx`
+- Components: `resources/js/components/`
+- Pages: `resources/js/pages/`
+- Routes: `resources/js/routes/`
+- Contexts: `resources/js/contexts/`
+- API services: `resources/js/api/`
+
+## Building for Production
+
+1. **Build React assets**
+   ```bash
+   npm run build
+   ```
+
+2. **Optimize Laravel application**
+   ```bash
+   php artisan optimize
+   ```
+
+## Troubleshooting
+
+### Common Issues
+1. **Vite HMR errors**: Ensure Vite server is running (`npm run dev`)
+2. **Database connection errors**: Check `.env` database configuration
+3. **Missing dependencies**: Run `composer install` and `npm install`
+
+### Development Tips
+- Use `php artisan tinker` for quick testing
+- Use Laravel Telescope for debugging (if installed)
+- Use React DevTools browser extension for React component debugging

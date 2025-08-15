@@ -11,22 +11,6 @@ export default defineConfig({
             ],
             refresh: true,
         }),
-        react({
-            // Bật fast refresh
-            fastRefresh: true,
-        }),
+        react(),
     ],
-    resolve: {
-        alias: {
-            '@': '/resources/js',
-        },
-    },
-    server: {
-        host: 'localhost',
-        port: 5173,
-        strictPort: false,
-        hmr: {
-            host: 'localhost'
-        }
-    },
 });
