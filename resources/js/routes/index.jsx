@@ -4,6 +4,7 @@ import Dashboard from '../pages/Dashboard';
 import Categories from '../pages/Categories';
 import Events from '../pages/Events';
 import Users from '../pages/Users';
+import FileExplorer from '../pages/FileExplorer';
 import Login from '../pages/Login';
 import TailwindTest from '../pages/TailwindTest';
 import ProtectedRoute from '../components/ProtectedRoute';
@@ -25,6 +26,10 @@ const router = createBrowserRouter([
   { 
     path: "/users", 
     element: <ProtectedRoute><Users /></ProtectedRoute>
+  },
+  { 
+    path: "/files", 
+    element: <ProtectedRoute><FileExplorer /></ProtectedRoute>
   },
   { 
     path: "/login", 

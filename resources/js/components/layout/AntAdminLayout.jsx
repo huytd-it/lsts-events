@@ -10,7 +10,8 @@ import {
   FolderOutlined,
   SettingOutlined,
   LogoutOutlined,
-  UserOutlined
+  UserOutlined,
+  FileOutlined
 } from '@ant-design/icons';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
@@ -46,6 +47,11 @@ const AntAdminLayout = ({ children }) => {
       key: '/users',
       icon: <UserOutlined />,
       label: <Link to="/users">Người dùng</Link>,
+    },
+    {
+      key: '/files',
+      icon: <FileOutlined />,
+      label: <Link to="/files">File Explorer</Link>,
     },
     {
       key: '/settings',

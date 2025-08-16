@@ -12,7 +12,7 @@ class EventMedia extends Model
     protected $primaryKey = 'media_id';
     
     protected $fillable = [
-        'order', 'media_name', 'file_path', 'event_id', 
+        'order', 'media_name', 'file_name', 'file_path', 'event_id', 
         'is_show', 'update_by', 'create_by'
     ];
 

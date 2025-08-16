@@ -1,0 +1,5236 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+The content has been processed where security check has been disabled.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Security check has been disabled - content may contain sensitive information
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+admin/
+  auth/
+    auth.js
+    index.php
+  categories/
+    categories.js
+    index.php
+  events/
+    events.js
+    index.php
+  login.php
+  nav.php
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="admin/auth/auth.js">
+const dateFilter = InputType('#dateFilter');
+const eventDateModal = InputType('#formEvent [name=event_date]').date();
+
+getUsers();
+function getUsers(data = {}) {
+  LoaderLsts.show();
+  data.search = $('#searchInput').val() ;
+  Http().api(`/auth/getUsers`, data).get(function (res) {
+    updateTableUsers(res.data);
+  });
+}
+getCategories();
+function getCategories(data = {}) {
+  Http().api(`categories/getAll`, data).get(function (res) {
+    updateTableCategories(res.data);
+  });
+}
+
+function storeOrUpdateCategory(data, callback) {
+  Http().api(`/categories/storeOrUpdate`, data).save(callback);
+}
+function getCategoryUser(data, callback) {
+  Http().api(`/categories/getCategoryUser`, data).get(callback);
+}
+function addCategoryToUser(data = {
+  user_email: '',
+  category_id: ''
+}, callback) {
+  Http().api(`/categories/addCategoryToUser`, data).save(callback);
+}
+var validator =
+  FormType("#formEvent")
+    .rules({
+      event_name: {
+        required: true,
+      },
+      event_date: {
+        required: true,
+      },
+      description: {
+        required: true,
+      },
+      category_id: {
+        required: true,
+      },
+    }).validate();
+
+
+
+const tableCategories = $('#table_categories').DataTable({
+  data: [],
+  lengthMenu: [
+    [10, 25, 100, 500, -1],
+    [10, 25, 100, 500, "All"],
+  ],
+  pageLength: -1,
+  columns: [{
+    data: 'category_id',
+
+    className: "text-center align-middle",
+
+  }, // Cột Tên
+  {
+    data: 'category_name',
+    className: "text-left align-middle",
+
+  }, // Cột Tên
+
+  {
+    data: null,
+    className: "text-center align-middle",
+    width: 100,
+    render: function (data, meta, row) {
+      var _idEl = (new Date()).getTime();
+      return `<div class="form-check form-switch">
+              <input class="form-check-input large btn_check_file" data-category_id=${row.category_id} 
+              type="checkbox" id="checkbox_${_idEl}" ${row.category_user_id ? "checked" : ""}>
+              <label class="form-check-label" for="checkbox_${_idEl}"> </label>
+            </div>`;
+    }
+  },
+  // {
+  //   data: null,
+  //   className: "text-center align-middle",
+  //   render: function (data, meta, row) {
+  //     return `<button type="button" 
+  //             data-category_id="${row.category_id}" 
+  //             data-category_name="${row.category_name}" 
+  //             class="btn btn-warning btn_edit_category"> Edit </button>
+  //             <button type="button" 
+  //             data-category_id="${row.category_id}" 
+  //             class="btn btn-danger btn_delete_media"> Delete </button>`;
+  //   }
+  // }
+    // Cột Email
+  ],
+  drawCallback: function () {
+
+
+  }
+});
+$(document).on('click', '.btn_edit_category', function () {
+  $('#formEvent [name=category_id]').val($(this).data('category_id'));
+  $('#formEvent [name=category_name]').val($(this).data('category_name'));
+})
+$(document).on('click', '.btn_delete_media', function () {
+  var rowSelected = $(this).closest('tr');
+  deleteCategory($(this).data(), function (res) {
+    Toast.set(res).success();
+    tableCategories.row(rowSelected).remove().draw();
+  });
+})
+$(document).on('click', '.btn_check_file', function () {
+  addCategoryToUser({
+    user_email: $('#formEvent [name=user_email]').val(),
+    category_id: $(this).data('category_id'),
+    is_check: $(this).is(':checked') ? 1 : 0
+  }, function (res) {
+    Toast.set(res).success();
+  })
+});
+$('#btn_publish_all').click(function () {
+  $('.btn_check_file').each(function (i, el) {
+    if (!$(el).is(":checked")) {
+      $(el).click();
+    }
+  })
+});
+
+
+function deleteCategory(data, callback) {
+
+  if (data.category_id)
+    Http().api("/categories/delete", data).save(callback);
+}
+
+function updateTableCategories(newData) {
+
+  // Xóa dữ liệu cũ
+  tableCategories.clear();
+
+  // Thêm dữ liệu mới
+  tableCategories.rows.add(newData);
+
+  // Vẽ lại bảng
+  tableCategories.draw();
+
+}
+
+
+
+
+$('#btn_open_event_modal').click(function () {
+  showEventModal();
+  $('#formEvent')[0].reset();
+  getCategories();
+
+
+});
+
+$('#btn_clear').click(function () {
+  $('#formEvent [name=category_id]').val("");
+  $('#formEvent [name=category_name]').val("");
+})
+$("#btn_save_event").click(function () {
+  storeOrUpdateCategory({
+    category_id: $('#formEvent [name=category_id]').val(),
+    category_name: $('#formEvent [name=category_name]').val(),
+  }, function (res) {
+    Popup.set(res).success();
+    getCategories({ category_user_email: $('#formEvent [name=user_email]').val() });
+  })
+});
+
+function showDataModal(id) {
+
+  $('#formEvent [name=user_email]').val(id);
+  showEventModal();
+  getCategories({ category_user_email: id });
+}
+var myModal = new bootstrap.Modal("#modalEvent", {
+  backdrop: "static",
+  keyboard: false
+})
+
+function getEvent(id, callback) {
+  Http().api(`/events/get?id=${id}`).get(callback);
+}
+
+function showEventModal() {
+
+
+  myModal.show();
+  setTimeout(() => {
+    tableCategories.columns.adjust().draw();
+  }, 100);
+}
+
+var myModalEl = document.getElementById('modalEvent')
+myModalEl.addEventListener('hidden.bs.modal', function (event) {
+  getUsers();
+})
+
+function hideEventModal() {
+  myModal.hide();
+  $('#modalEvent').modal('hide');
+}
+
+
+
+
+
+dateFilter.dateRanger({
+  autoUpdateInput: true,
+  ranges: {
+    'Today': [moment(), moment()],
+    'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
+    'Last 7 Days': [moment().subtract(6, 'days'), moment()],
+    'Last 30 Days': [moment().subtract(29, 'days'), moment()],
+    'This Month': [moment().startOf('month'), moment().endOf('month')],
+    'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
+  }
+});
+
+dateFilter.change("");
+
+
+function updateTableUsers(newData) {
+  // Xóa dữ liệu cũ
+  tableUsers.clear();
+
+  // Thêm dữ liệu mới
+  tableUsers.rows.add(newData);
+  tableUsers.columns.adjust().draw();
+  // Vẽ lại bảng
+  //table.draw();
+}
+
+var tableUsers = $("#table_users").DataTable({
+  //processing: true,
+
+  select: true,
+  searching: false,
+  responsive: true,
+  data: [],
+  lengthMenu: [
+    [10, 25, 100, 500, -1],
+    [10, 25, 100, 500, "All"],
+  ],
+  order: [
+    [0, "asc"]
+  ],
+  columns: [{
+    data: "user_id",
+    name: "user_id",
+    className: "text-center align-middle",
+  },
+  {
+    data: "user_name",
+    className: "text-left align-middle min-200",
+    render: function (data, meta, row) {
+      return data + "<br>" + row.email;
+    }
+
+  },
+
+  {
+    data: "avatar",
+    name: "avatar",
+
+    className: "text-left align-middle",
+    render: function (data, meta, row) {
+      return `<img style="width:90px; height:60px;object-fit:cover;" src="${"https://crm3.lsts.edu.vn/crm/" + data.trim()}">`;
+    }
+  },
+  {
+    data: "categories",
+    name: "categories",
+    className: "text-left align-middle ",
+    render: function (data, meta, row) {
+      var html = [];
+      data.forEach(function (el) {
+        html.push(el.category_name);
+      });
+
+      return html.join(", ");
+    }
+  },
+  {
+    data: null,
+    className: "text-left align-middle min-300",
+
+    render: function (data, meta, row) {
+      return (
+        `<button data-id=${row.id} onClick=showDataModal("${row.email}") class="btn m-1 btn-primary btn-icon"  > Show Categories </button>`
+      );
+    },
+  },
+  ],
+  drawCallback: function () {
+    LoaderLsts.hide();
+  },
+});
+
+
+
+function deleteEvent(id) {
+  Http().api(`/events/delete?id=${id}`).get(function (res) {
+    Popup.set(res).success();
+    tableUsers.ajax.reload();
+  });
+}
+
+
+$('#categoryFilter').change(function () {
+
+});
+
+var searchDebounce = debounce(function () {
+  getUsers({ search: $('#searchInput').val() });
+}, 300);
+
+$('#searchInput').on("input", function () {
+  searchDebounce();
+});
+
+$('#btnFilter').on("click", function () {
+  getUsers({ search: $('#searchInput').val() });
+});
+$('#dateFilter').on("apply.daterangepicker", function (ev, picker) {
+  $(this).val(picker.startDate.format('MM/DD/YYYY') + ' - ' + picker.endDate.format('MM/DD/YYYY'));
+  console.log(dateFilter.get())
+  tableUsers.ajax.reload();
+});
+$('#dateFilter').on("cancel.daterangepicker", function (ev, picker) {
+  $(this).val("");
+  console.log(dateFilter.get())
+  tableUsers.ajax.reload();
+});
+</file>
+
+<file path="admin/auth/index.php">
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <?php require_once $_SERVER['DOCUMENT_ROOT'] . "/pages/css.php" ?>
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.1.6/css/dataTables.bootstrap5.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css">
+
+
+  <title>User Management - Admin Portal</title>
+
+  <style>
+    /* Custom style to enlarge checkbox */
+    .form-check-input.large {
+      transform: scale(1.5);
+      /* Increase the size by 1.5 times */
+      margin-left: -1.2em;
+    }
+  </style>
+</head>
+
+<body>
+  <?php include  __DIR__ . "/../nav.php" ?>
+
+  <!-- Modal -->
+  <div class="modal" id="modalEvent">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalEventLabel"> Categories</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="formEvent">
+            <div class="row g-2">
+              <!-- <div class="col-xl-2 form-group">
+                <label class="form-label" for="receiver" class="lang" vi="Mã định danh">ID</label>
+                <input type="text" class="form-control" disabled name="category_id">
+              </div>
+              <div class="col-xl-10 form-group">
+                <label class="form-label" for="receiver" class="lang" vi="Nhóm tài sản">Category Name</label>
+                <input type="text" class="form-control" name="category_name">
+              
+              </div>
+              <div class="col-xl-12 form-group">
+
+                <button type="button" class="btn btn-primary float-end" id="btn_save_event">Save changes</button>
+                <button type="button" class="btn btn-danger" id="btn_clear">Clear</button>
+              </div> -->
+
+              <input type="text" class="form-control" name="user_email" hidden>
+
+              <div class="col-xl-12">
+                <table class="w-100 table table-bordered" id="table_categories">
+                  <thead>
+                    <tr>
+
+                      <th>#</th>
+                      <th>Name</th>
+
+                      <th>Public</th>
+
+                      <!-- <th>#</th> -->
+                    </tr>
+                  </thead>
+                </table>
+              </div>
+            </div>
+          </form>
+
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="container-xl" style="margin-top:5rem;">
+
+    <nav aria-label="breadcrumb" class="mt-5">
+      <ol class="breadcrumb">
+        <!-- <li class="breadcrumb-item"><a href="/admin/">Admin</a></li> -->
+        <li class="breadcrumb-item active" aria-current="page"><span>User Management</span></li>
+      </ol>
+    </nav>
+
+    <form id="searchForm" class="mb-4">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label" for="">&nbsp; </label>
+          <div class="input-group">
+            <span class="input-group-text"> <img width="20" src="<?php asset('assets\images\icons\search.svg') ?>" alt="" srcset=""></span>
+            <input type="text" class="form-control" id="searchInput" placeholder="Type user name, user id, email" aria-label="Search">
+          </div>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label" for="">&nbsp; </label> <br>
+          <button type="button" class="btn btn-primary" id="btnFilter"> Filter </button>
+        </div>
+      </div>
+    </form>
+
+    <table class="table table-hover table-bordered" id="table_users">
+      <thead>
+        <tr class="bg-secondary text-white">
+          <th class="text-center">ID</th>
+          <th class="text-center">Name </th>
+
+          <th class="text-center">Avatar</th>
+          <th class="text-center">Categories</th>
+          <th class="text-center">Feature</th>
+
+        </tr>
+      </thead>
+
+    </table>
+
+
+  </div>
+
+  <?php
+  require_once $_SERVER['DOCUMENT_ROOT'] . "/pages/js.php";
+  ?>
+
+
+  <footer style="min-height: 40vh;"></footer>
+  <script src="https://cdn.datatables.net/2.1.6/js/dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.6/js/dataTables.bootstrap5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+  <script src="/pages/admin/auth/auth.js?v=2.2"></script>
+
+</body>
+
+</html>
+</file>
+
+<file path="admin/categories/categories.js">
+// ========================================
+// Category Tree Operations - Extensions
+// ========================================
+
+// Add subcategory function
+class CategoriesManager {
+    constructor() {
+        this.table = null;
+        this.editingId = null;
+        this.currentCategoryId = null;
+
+        this.initializeElements();
+        this.initializeDataTable();
+        this.bindEvents();
+        this.loadStatistics();
+    }
+
+    initializeElements() {
+        // Form elements
+        this.formCategory = document.getElementById('formCategory');
+        this.modalCategory = new bootstrap.Modal(document.getElementById('modalCategory'));
+        this.modalUserAssignment = new bootstrap.Modal(document.getElementById('modalUserAssignment'));
+
+        // Buttons
+        this.btnAddCategory = document.getElementById('btn_add_category');
+        this.btnSaveCategory = document.getElementById('btn_save_category');
+        this.btnClearCategory = document.getElementById('btn_clear_category');
+        this.btnRefresh = document.getElementById('btn_refresh');
+        this.btnSaveUserAssignment = document.getElementById('btn_save_user_assignment');
+
+        // Search
+        this.searchInput = document.getElementById('searchInput');
+
+        // User select
+        this.userSelect = initAjaxTomSelect('#userSelect', "/api/v1/auth/getAllUsers", function (data) {
+            return {
+                value: data.email,
+                text: data.email + " - " + data.user_id + " - " + data.user_name,
+                user_email:data.email
+            }
+        }, function (res) {
+            return res.data;
+        });
+
+        // Add change event listener to userSelect
+        if (this.userSelect && this.userSelect.select2) {
+            this.userSelect.select2().on('change', () => {
+                this.updateAssignedUsersList();
+            });
+        }
+
+    }
+
+    initializeDataTable() {
+        var self = this;
+        this.table = $('#table_categories').DataTable({
+            processing: true,
+            serverSide: true,
+            ajax: {
+                url: '/api/v1/categories/getCategoryTree',
+                type: 'GET',
+                error: function(xhr, error, thrown) {
+                    console.error('DataTable error:', error);
+                    Utils.showToast('Error loading categories', 'error');
+                },
+                data: function(data) {
+                    return $.extend(data, {
+                        search: data.search.value,
+                        include_stats: true,
+                        include_hierarchy: true
+                    });
+                }
+            },
+            columns: [
+                {
+                    data: "category_id"
+                },
+                {
+                    data: 'category_id',
+                    className: 'text-center',
+                    width: '60px',
+                    defaultContent: '',
+                    searchable: false
+                },
+                {
+                    data: 'category_name',
+                    defaultContent: '',
+                    render: function(data, type, row) {
+                        // Create hierarchical display with tree structure
+                        var level = row.level || 0;
+                        var indent = '&nbsp;&nbsp;'.repeat(level * 2);
+                        var treeSymbol = level > 0 ? '└─ ' : '';
+                        var hasChildren = row.has_children || 0;
+                        
+                        // Add expand/collapse icon for parent categories
+                        var expandIcon = hasChildren ? 
+                            '<i class="bi bi-chevron-down category-expand" data-category-id="' + row.category_id + '" style="cursor: pointer; margin-right: 5px;"></i>' : 
+                            '<i class="bi bi-dot" style="margin-right: 5px;"></i>';
+                        
+                        // Style based on level
+                        var levelClass = 'category-level-' + Math.min(level, 3);
+                        var categoryDisplay = '<span class="' + levelClass + '">' + 
+                            indent + expandIcon + treeSymbol + '<strong>' + (data || '') + '</strong></span>';
+                        
+                        // Add path info if available
+                        if (row.path && row.path !== data && level > 0) {
+                            return categoryDisplay + '<br><small class="text-muted ms-3">Path: ' + row.path + '</small>';
+                        }
+                        
+                        return categoryDisplay;
+                    }
+                },
+                {
+                    data: 'is_public',
+                    className: 'text-center',
+                    defaultContent: '',
+                    render: function(data, type, row) {
+                        return (data == 1 || data === true) ?
+                            '<span class="badge bg-success">Public</span>' :
+                            '<span class="badge bg-secondary">Private</span>';
+                    }
+                },
+                {
+                    data: 'events_count',
+                    className: 'text-center',
+                    defaultContent: '',
+                    render: function(data, type, row) {
+                        var count = data || 0;
+                        var badgeClass = count > 0 ? 'bg-info' : 'bg-light text-dark';
+                        return '<span class="badge ' + badgeClass + '">' + count + '</span>';
+                    }
+                },
+                {
+                    data: 'assigned_users_count',
+                    className: 'text-center',
+                    defaultContent: '',
+                    render: function(data, type, row) {
+                        var count = data || 0;
+                        var badgeClass = count > 0 ? 'bg-warning' : 'bg-light text-dark';
+                        return '<span class="badge ' + badgeClass + '">' + count + '</span>';
+                    }
+                },
+                {
+                    data: 'created_at',
+                    className: 'text-center',
+                    defaultContent: '',
+                    render: function(data, type, row) {
+                        return data ? new Date(data).toLocaleDateString() : '-';
+                    }
+                },
+                {
+                    data: null,
+                    className: 'text-center',
+                    orderable: false,
+                    defaultContent: '',
+                    render: function(data, type, row) {
+                        var hasChildren = row.has_children || 0;
+                        var canDelete = !hasChildren && (row.events_count || 0) === 0;
+                        
+                        // Ensure we have valid data for the buttons
+                        var categoryId = row.category_id || 0;
+                        var categoryName = row.category_name || '';
+                        
+                        return '<div class="btn-group" role="group">' +
+                            '<button type="button" class="btn btn-sm btn-outline-success" ' +
+                            'onclick="categoriesManager.addSubCategory(' + categoryId + ', \'' + categoryName + '\')" ' +
+                            'title="Add Subcategory">' +
+                            '<i class="bi bi-plus-circle"></i></button>' +
+                            '<button type="button" class="btn btn-sm btn-outline-primary" ' +
+                            'onclick="categoriesManager.editCategory(' + categoryId + ')" ' +
+                            'title="Edit Category">' +
+                            '<i class="bi bi-pencil"></i></button>' +
+                            '<button type="button" class="btn btn-sm btn-outline-info" ' +
+                            'onclick="categoriesManager.manageUsers(' + categoryId + ', \'' + categoryName + '\')" ' +
+                            'title="Manage Users">' +
+                            '<i class="bi bi-people"></i></button>' +
+                            '<button type="button" class="btn btn-sm btn-outline-secondary" ' +
+                            'onclick="categoriesManager.moveCategory(' + categoryId + ', \'' + categoryName + '\')" ' +
+                            'title="Move Category">' +
+                            '<i class="bi bi-arrow-up-right"></i></button>' +
+                            '<button type="button" class="btn btn-sm btn-outline-danger" ' +
+                            'onclick="categoriesManager.deleteCategory(' + categoryId + ', \'' + categoryName + '\')" ' +
+                            'title="Delete Category" ' + (canDelete ? '' : 'disabled') + '>' +
+                            '<i class="bi bi-trash"></i></button></div>';
+                    }
+                }
+            ],
+            order: [[0, 'asc']], // Order by ID to maintain hierarchy
+            pageLength: 25,
+            responsive: true,
+            language: {
+                processing: "Loading categories...",
+                emptyTable: "No categories found"
+            },
+            drawCallback: function(settings) {
+                // Re-bind any event handlers that might be needed after redraw
+            }
+        });
+    }
+
+    bindEvents() {
+        // Add category button
+        this.btnAddCategory?.addEventListener('click', () => {
+            this.showAddCategoryModal();
+        });
+
+        // Save category button
+        this.btnSaveCategory?.addEventListener('click', () => {
+            this.saveCategory();
+        });
+
+        // Clear form button
+        this.btnClearCategory?.addEventListener('click', () => {
+            this.clearForm();
+        });
+
+        // Refresh button
+        this.btnRefresh?.addEventListener('click', () => {
+            this.refreshData();
+        });
+
+        // Search input
+        this.searchInput?.addEventListener('keyup', Utils.debounce((e) => {
+            this.table.search(e.target.value).draw();
+        }, 300));
+
+        // Save user assignment
+        this.btnSaveUserAssignment?.addEventListener('click', () => {
+            this.saveUserAssignment();
+        });
+
+        // Form validation
+        this.formCategory?.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveCategory();
+        });
+    }
+
+    showAddCategoryModal() {
+        this.editingId = null;
+        this.clearForm();
+        document.getElementById('modalCategoryLabel').textContent = 'Add New Category';
+        this.modalCategory.show();
+    }
+
+    editCategory(categoryId) {
+        this.editingId = categoryId;
+        document.getElementById('modalCategoryLabel').textContent = 'Edit Category';
+
+        // Load category data
+        Utils.request('/api/v1/categories/getById', 'GET', { id: categoryId })
+            .then(response => {
+                if (response.success && response.data) {
+                    const category = response.data;
+
+                    console.log('Loading category for edit:', category);
+
+                    // Populate form
+                    this.formCategory.querySelector('[name="category_id"]').value = category.category_id || '';
+                    this.formCategory.querySelector('[name="category_name"]').value = category.category_name || '';
+                    this.formCategory.querySelector('[name="category_description"]').value = category.category_description || '';
+                    this.formCategory.querySelector('[name="is_public"]').checked = category.is_public == 1;
+
+                    console.log('Form populated with:', {
+                        category_id: this.formCategory.querySelector('[name="category_id"]').value,
+                        category_name: this.formCategory.querySelector('[name="category_name"]').value,
+                        category_description: this.formCategory.querySelector('[name="category_description"]').value,
+                        is_public: this.formCategory.querySelector('[name="is_public"]').checked
+                    });
+
+                    this.modalCategory.show();
+                } else {
+                    Utils.showToast('Error loading category data', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error loading category:', error);
+                Utils.showToast('Error loading category data', 'error');
+            });
+    }
+
+    saveCategory() {
+        if (!this.formCategory.checkValidity()) {
+            this.formCategory.reportValidity();
+            return;
+        }
+
+        const formData = new FormData(this.formCategory);
+        const data = {
+            category_name: formData.get('category_name'),
+            category_description: formData.get('category_description') || '',
+            is_public: this.formCategory.querySelector('[name="is_public"]').checked ? 1 : 0
+        };
+
+        // Get parent_id from hidden field if exists
+        const parentIdField = this.formCategory.querySelector('[name="parent_id"]');
+        if (parentIdField && parentIdField.value) {
+            data.parent_id = parentIdField.value;
+        }
+
+        const url = this.editingId ?
+            `/api/v1/categories/update` :
+            `/api/v1/categories/create`;
+
+        if (this.editingId) {
+            data.category_id = this.editingId;
+        }
+
+        Utils.request(url, 'POST', data)
+            .then(response => {
+                if (response.success) {
+                    Utils.showToast(`Category ${this.editingId ? 'updated' : 'created'} successfully`, 'success');
+                    this.modalCategory.hide();
+                    this.refreshData();
+                    // Clear parent info
+                    const parentInfo = document.getElementById('parent-category-info');
+                    if (parentInfo) {
+                        parentInfo.innerHTML = '';
+                    }
+                } else {
+                    Utils.showToast(response.msg || response.message || 'Error saving category', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving category:', error);
+                Utils.showToast(error.msg || error.message || 'Error saving category', 'error');
+            });
+    }
+
+    deleteCategory(categoryId, categoryName) {
+        Swal.fire({
+            title: 'Delete Category?',
+            text: `Are you sure you want to delete "${categoryName}"? This action cannot be undone.`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc3545',
+            cancelButtonColor: '#6c757d',
+            confirmButtonText: 'Yes, delete it!'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                Utils.request('/api/v1/categories/delete', 'POST', { category_id: categoryId })
+                    .then(response => {
+                        if (response.success) {
+                            Utils.showToast('Category deleted successfully', 'success');
+                            this.refreshData();
+                        } else {
+                            Utils.showToast(response.message || 'Error deleting category', 'error');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error deleting category:', error);
+                        Utils.showToast('Error deleting category', 'error');
+                    });
+            }
+        });
+    }
+
+    manageUsers(categoryId, categoryName) {
+        this.currentCategoryId = categoryId;
+        document.getElementById('selected-category-name').textContent = categoryName;
+
+        // Update user select parameters
+        if (this.userSelect) {
+            this.userSelect.params({
+                category_id: categoryId
+            });
+        }
+
+        // Load available users
+        this.loadAvailableUsers();
+
+        // Load assigned users
+        this.loadAssignedUsers(categoryId);
+
+        this.modalUserAssignment.show();
+    }
+
+    loadAvailableUsers() {
+        if (this.userSelect && this.userSelect.select2) {
+            this.userSelect.select2().load('');
+        }
+    }
+
+    loadAssignedUsers(categoryId) {
+        if (this.userSelect && this.userSelect.select2) {
+            this.userSelect.select2().load('');
+        }
+        Utils.request('/api/v1/categories/getAssignedUsers', 'GET', { category_id: categoryId })
+            .then(response => {
+                if (response.success && response.data) {
+                    this.renderAssignedUsers(response.data);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading assigned users:', error);
+                Utils.showToast('Error loading assigned users', 'error');
+            });
+    }
+
+    renderAssignedUsers(users) {
+        const container = document.getElementById('assigned-users-list');
+        container.innerHTML = '';
+
+        if (users.length === 0) {
+            container.innerHTML = '<p class="text-muted mb-0">No users assigned to this category</p>';
+        } else {
+            users.forEach(user => {
+                this.addUserBadge(user.user_email, user.user_name || user.user_email);
+            });
+        }
+    }
+
+    addUserBadge(userEmail, userName) {
+        const container = document.getElementById('assigned-users-list');
+
+        // Check if user already exists
+        const existingBadges = container.querySelectorAll('.badge');
+        for (let badge of existingBadges) {
+            const removeButton = badge.querySelector('.btn-close');
+            if (removeButton) {
+                const onclickAttr = removeButton.getAttribute('onclick');
+                const emailMatch = onclickAttr.match(/removeUserFromList\('([^']+)'\)/);
+                if (emailMatch && emailMatch[1] === userEmail) {
+                    return; // User already exists, don't add duplicate
+                }
+            }
+        }
+
+        // Remove "no users" message if it exists
+        const noUsersMessage = container.querySelector('.text-muted');
+        if (noUsersMessage) {
+            noUsersMessage.remove();
+        }
+
+        const userBadge = document.createElement('span');
+        userBadge.className = 'badge bg-primary me-2 mb-2 text-secondary';
+        userBadge.setAttribute('data-user-email', userEmail);
+        userBadge.innerHTML = `
+            ${userName}
+            <button type="button" class="btn-close btn-close-white ms-1" 
+                    onclick="categoriesManager.removeUserFromList('${userEmail}')"
+                    style="font-size: 0.7em;"></button>
+        `;
+        container.appendChild(userBadge);
+    }
+
+    updateAssignedUsersList() {
+        if (this.userSelect) {
+            const selectedUsers = this.userSelect.data();
+            
+            // Check if we have selected users data
+            if (selectedUsers && selectedUsers.value) {
+                // For single selection
+                if (typeof selectedUsers === 'object' && selectedUsers.value) {
+                    this.addUserBadge(selectedUsers.value, selectedUsers.text || selectedUsers.value);
+                }
+                // For multiple selections (array)
+                else if (Array.isArray(selectedUsers)) {
+                    selectedUsers.forEach(user => {
+                        this.addUserBadge(user.value, user.text || user.value);
+                    });
+                }
+            }
+        }
+    }
+
+    saveUserAssignment() {
+        // Get users only from the assigned users list
+        const assignedUsersList = document.getElementById('assigned-users-list');
+        const userBadges = assignedUsersList.querySelectorAll('.badge[data-user-email]');
+        const assignedUsers = [];
+
+        userBadges.forEach(badge => {
+            const userEmail = badge.getAttribute('data-user-email');
+            if (userEmail) {
+                assignedUsers.push(userEmail);
+            }
+        });
+
+        Utils.request('/api/v1/categories/assignUsers', 'POST', {
+            category_id: this.currentCategoryId,
+            user_emails: assignedUsers
+        })
+            .then(response => {
+                if (response.success) {
+                    Utils.showToast('User assignment updated successfully', 'success');
+                    this.modalUserAssignment.hide();
+                    this.refreshData();
+                } else {
+                    Utils.showToast(response.message || 'Error updating user assignment', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving user assignment:', error);
+                Utils.showToast('Error updating user assignment', 'error');
+            });
+    }
+
+    removeUserFromList(userEmail) {
+        const container = document.getElementById('assigned-users-list');
+        const userBadges = container.querySelectorAll('.badge[data-user-email]');
+
+        userBadges.forEach(badge => {
+            if (badge.getAttribute('data-user-email') === userEmail) {
+                badge.remove();
+            }
+        });
+
+        // Check if no users left, show message
+        const remainingBadges = container.querySelectorAll('.badge[data-user-email]');
+        if (remainingBadges.length === 0) {
+            container.innerHTML = '<p class="text-muted mb-0">No users assigned to this category</p>';
+        }
+    }
+
+    removeUserFromCategory(userEmail) {
+        // Remove user from category via API
+        Utils.request('/api/v1/categories/removeUser', 'POST', {
+            category_id: this.currentCategoryId,
+            user_email: userEmail
+        })
+            .then(response => {
+                if (response.success) {
+                    Utils.showToast('User removed successfully', 'success');
+                    // Refresh the assigned users display
+                    this.loadAssignedUsers(this.currentCategoryId);
+                    this.refreshData();
+                } else {
+                    Utils.showToast(response.message || 'Error removing user', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error removing user:', error);
+                Utils.showToast('Error removing user', 'error');
+            });
+    }
+
+    clearForm() {
+        this.formCategory.reset();
+        this.formCategory.querySelector('[name="category_id"]').value = '';
+    }
+
+    refreshData() {
+        this.table.ajax.reload();
+        this.loadStatistics();
+    }
+
+    loadStatistics() {
+        Utils.request('/api/v1/categories/getStatistics', 'GET')
+            .then(response => {
+                if (response.success && response.data) {
+                    const stats = response.data;
+                    document.getElementById('total-categories').textContent = stats.total_categories || 0;
+                    document.getElementById('public-categories').textContent = stats.public_categories || 0;
+                    document.getElementById('private-categories').textContent = stats.private_categories || 0;
+                    document.getElementById('assigned-users').textContent = stats.assigned_users || 0;
+                }
+            })
+            .catch(error => {
+                console.error('Error loading statistics:', error);
+            });
+    }
+    
+    // Add subcategory function
+    addSubCategory(parentId, parentName) {
+        this.editingId = null;
+        this.clearForm();
+        
+        // Create parent info display if it doesn't exist
+        let parentInfo = document.getElementById('parent-category-info');
+        if (!parentInfo) {
+            parentInfo = document.createElement('div');
+            parentInfo.id = 'parent-category-info';
+            this.formCategory.insertBefore(parentInfo, this.formCategory.firstChild);
+        }
+        
+        parentInfo.innerHTML = `
+            <div class="alert alert-info">
+                <i class="bi bi-info-circle"></i> 
+                Creating subcategory under: <strong>${parentName}</strong>
+                <input type="hidden" name="parent_id" value="${parentId}">
+            </div>
+        `;
+        
+        document.getElementById('modalCategoryLabel').textContent = `Add Subcategory to "${parentName}"`;
+        this.modalCategory.show();
+    }
+
+    // Move category function
+    moveCategory(categoryId, categoryName) {
+        const self = this;
+        Swal.fire({
+            title: `Move "${categoryName}"`,
+            html: `
+                <div class="form-group">
+                    <label>Select new parent category:</label>
+                    <select id="moveParentSelect" class="form-select">
+                        <option value="">-- Root Level --</option>
+                    </select>
+                </div>
+                <small class="text-muted">Choose the new parent category or select root level to make it a top-level category.</small>
+            `,
+            showCancelButton: true,
+            confirmButtonText: 'Move Category',
+            cancelButtonText: 'Cancel',
+            didOpen: () => {
+                self.loadParentOptions(categoryId, 'moveParentSelect');
+            }
+        }).then((result) => {
+            if (result.isConfirmed) {
+                const newParentId = document.getElementById('moveParentSelect').value;
+                self.performMoveCategory(categoryId, newParentId);
+            }
+        });
+    }
+
+    // Perform move category
+    performMoveCategory(categoryId, newParentId) {
+        const data = {
+            category_id: categoryId,
+            parent_id: newParentId || null
+        };
+
+        Utils.request('/api/v1/categories/move', 'POST', data)
+            .then(response => {
+                if (response.success) {
+                    Utils.showToast('Category moved successfully', 'success');
+                    this.refreshData();
+                } else {
+                    Utils.showToast(response.message || 'Error moving category', 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error moving category:', error);
+                Utils.showToast('Error moving category', 'error');
+            });
+    }
+
+    // Load parent options for dropdown
+    loadParentOptions(excludeCategoryId, selectId) {
+        Utils.request('/api/v1/categories/getCategoryTree', 'GET', { 
+            exclude_id: excludeCategoryId,
+            include_hierarchy: true 
+        })
+            .then(response => {
+                if (response.success && response.data) {
+                    const select = document.getElementById(selectId);
+                    select.innerHTML = '<option value="">-- Root Level --</option>';
+                    
+                    response.data.forEach(category => {
+                        const indent = '  '.repeat(category.level || 0);
+                        const prefix = category.level > 0 ? '└─ ' : '';
+                        const option = document.createElement('option');
+                        option.value = category.category_id;
+                        option.textContent = `${indent}${prefix}${category.category_name}`;
+                        select.appendChild(option);
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading parent options:', error);
+            });
+    }
+}
+
+// Initialize when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    window.categoriesManager = new CategoriesManager();
+});
+</file>
+
+<file path="admin/categories/index.php">
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <?php require_once $_SERVER['DOCUMENT_ROOT'] . "/pages/css.php" ?>
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.1.6/css/dataTables.bootstrap5.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css">
+
+  <title>Categories Management - Admin Portal</title>
+
+  <style>
+    /* Custom style to enlarge checkbox */
+    .form-check-input.large {
+      transform: scale(1.5);
+      margin-left: -1.2em;
+    }
+
+    .category-stats {
+      background: rgba(158, 239, 225, 0.1);
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      text-align: center;
+      padding: 1rem;
+    }
+
+    .stat-number {
+      font-size: 2rem;
+      font-weight: bold;
+      color: var(--color-secondary);
+    }
+
+    .stat-label {
+      color: #666;
+      font-size: 0.9rem;
+    }
+
+    /* Category Tree Styles */
+    .category-level-0 {
+      font-weight: bold;
+      color: var(--color-secondary);
+    }
+
+    .category-level-1 {
+      color: #495057;
+      padding-left: 0.5rem;
+    }
+
+    .category-level-2 {
+      color: #6c757d;
+      padding-left: 1rem;
+      font-size: 0.9em;
+    }
+
+    .category-level-3 {
+      color: #868e96;
+      padding-left: 1.5rem;
+      font-size: 0.85em;
+    }
+
+    .category-expand {
+      transition: transform 0.2s ease;
+    }
+
+    .category-expand:hover {
+      transform: scale(1.2);
+      color: var(--color-primary);
+    }
+
+    .category-path {
+      font-size: 0.75rem;
+      color: #6c757d;
+      font-style: italic;
+    }
+
+    /* Tree line styling */
+    .tree-symbol {
+      font-family: monospace;
+      color: #6c757d;
+    }
+
+    /* Enhanced statistics cards */
+    .stat-card:hover {
+      transform: translateY(-2px);
+      transition: transform 0.2s ease;
+    }
+
+    /* Hierarchy level badges */
+    .hierarchy-badge {
+      font-size: 0.7rem;
+      padding: 0.25rem 0.5rem;
+    }
+  </style>
+</head>
+
+<body>
+  <?php include  __DIR__ . "/../nav.php" ?>
+
+  <!-- Add/Edit Category Modal -->
+  <div class="modal" id="modalCategory">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalCategoryLabel">Add New Category</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="formCategory">
+            <div class="row g-3">
+              <div class="col-xl-3 form-group">
+                <label class="form-label" for="category_id">ID</label>
+                <input type="text" class="form-control" disabled name="category_id">
+              </div>
+              <div class="col-xl-9 form-group">
+                <label class="form-label" for="category_name">Category Name <span class="text-danger">*</span></label>
+                <input type="text" class="form-control" name="category_name" required>
+              </div>
+              <div class="col-xl-12 form-group">
+                <label class="form-label" for="category_description">Description</label>
+                <textarea class="form-control" name="category_description" rows="3" placeholder="Enter category description (optional)"></textarea>
+              </div>
+              <div class="col-xl-12 form-group">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" name="is_public" id="is_public">
+                  <label class="form-check-label" for="is_public">
+                    Public Category (visible to all users)
+                  </label>
+                </div>
+              </div>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" id="btn_clear_category">Clear</button>
+          <button type="button" class="btn btn-primary" id="btn_save_category">Save Category</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- User Assignment Modal -->
+  <div class="modal" id="modalUserAssignment">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalUserAssignmentLabel">Assign Users to Category</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="category-info" class="alert alert-info mb-3">
+            <strong>Category:</strong> <span id="selected-category-name"></span>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Search Users</label>
+            <select class="form-select" id="userSelect" >
+              <!-- Users will be loaded dynamically -->
+            </select>
+          </div>
+
+          <div class="mt-4">
+            <h6>Currently Assigned Users:</h6>
+            <div id="assigned-users-list" class="border rounded p-2" style="min-height: 100px;">
+              <!-- Assigned users will be displayed here -->
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-primary" id="btn_save_user_assignment">Save Assignment</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="container-xl" style="margin-top:5rem;">
+    <nav aria-label="breadcrumb" class="mt-5">
+      <ol class="breadcrumb">
+        <!-- <li class="breadcrumb-item"><a href="/admin/">Admin</a></li> -->
+        <li class="breadcrumb-item active" aria-current="page">
+          <span>Categories Management</span>
+        </li>
+      </ol>
+    </nav>
+
+    <!-- Category Statistics -->
+    <div class="category-stats">
+      <div class="row">
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-number" id="total-categories">0</div>
+            <div class="stat-label">Total Categories</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-number" id="public-categories">0</div>
+            <div class="stat-label">Public Categories</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-number" id="private-categories">0</div>
+            <div class="stat-label">Private Categories</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-number" id="assigned-users">0</div>
+            <div class="stat-label">Assigned Users</div>
+          </div>
+        </div>
+      </div>
+      <!-- Tree Statistics Row -->
+      <div class="row mt-3">
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-number" id="root-categories">0</div>
+            <div class="stat-label">Root Categories</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-number" id="max-depth">0</div>
+            <div class="stat-label">Max Depth</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-number" id="leaf-categories">0</div>
+            <div class="stat-label">Leaf Categories</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card">
+            <div class="stat-number" id="orphaned-categories">0</div>
+            <div class="stat-label">Issues Found</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Search and Actions -->
+    <div class="row mb-4">
+      <div class="col-md-6">
+        <div class="input-group">
+          <span class="input-group-text">
+            <img width="20" src="<?php asset('assets/images/icons/search.svg') ?>" alt="" srcset="">
+          </span>
+          <input type="text" class="form-control" id="searchInput" placeholder="Search categories..." aria-label="Search">
+        </div>
+      </div>
+      <div class="col-md-6 text-end">
+        <button type="button" class="btn btn-primary" id="btn_add_category">
+          <i class="bi bi-plus-circle"></i> Add New Category
+        </button>
+        <button type="button" class="btn btn-outline-secondary" id="btn_refresh">
+          <i class="bi bi-arrow-clockwise"></i> Refresh
+        </button>
+      </div>
+    </div>
+
+    <!-- Tree View Controls -->
+    <div class="row mb-3">
+      <div class="col-md-6">
+        <div class="btn-group" role="group">
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_expand_all">
+            <i class="bi bi-chevron-double-down"></i> Expand All
+          </button>
+          <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_collapse_all">
+            <i class="bi bi-chevron-double-up"></i> Collapse All
+          </button>
+          <button type="button" class="btn btn-outline-info btn-sm" id="btn_tree_view">
+            <i class="bi bi-diagram-3"></i> Tree View
+          </button>
+        </div>
+      </div>
+      <div class="col-md-6 text-end">
+        <div class="btn-group" role="group">
+          <button type="button" class="btn btn-outline-success btn-sm" id="btn_add_root">
+            <i class="bi bi-plus-lg"></i> Add Root Category
+          </button>
+          <button type="button" class="btn btn-outline-warning btn-sm" id="btn_validate_tree">
+            <i class="bi bi-check2-square"></i> Validate Tree
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Categories Table -->
+    <div class="card">
+      <div class="card-body">
+        <table class="table table-hover table-bordered" id="table_categories">
+          <thead class="bg-secondary text-white">
+            <tr>
+              <th class="text-center" style="width: 60px;">ID</th>
+              <th>Category Hierarchy</th>
+              <th class="text-center" style="width: 100px;">Type</th>
+              <th class="text-center" style="width: 100px;">Public</th>
+              <th class="text-center" style="width: 100px;">Events</th>
+              <th class="text-center" style="width: 100px;">Users</th>
+              <th class="text-center" style="width: 120px;">Created</th>
+              <th class="text-center" style="width: 250px;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Data will be loaded dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <?php
+  require_once $_SERVER['DOCUMENT_ROOT'] . "/pages/js.php";
+  ?>
+
+  <footer style="min-height: 40vh;"></footer>
+  <script src="https://cdn.datatables.net/2.1.6/js/dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.6/js/dataTables.bootstrap5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+  <script src="/pages/admin/categories/categories.js"></script>
+
+  <!-- Category Tree Enhancement Script -->
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      // Enhanced tree controls
+      document.getElementById('btn_expand_all').addEventListener('click', function() {
+        // Expand all categories
+        document.querySelectorAll('.category-expand.bi-chevron-right').forEach(icon => {
+          icon.click();
+        });
+        Utils.showToast('All categories expanded', 'info');
+      });
+
+      document.getElementById('btn_collapse_all').addEventListener('click', function() {
+        // Collapse all categories
+        document.querySelectorAll('.category-expand.bi-chevron-down').forEach(icon => {
+          icon.click();
+        });
+        Utils.showToast('All categories collapsed', 'info');
+      });
+
+      document.getElementById('btn_add_root').addEventListener('click', function() {
+        if (window.categoriesManager) {
+          categoriesManager.showAddCategoryModal();
+          document.getElementById('modalCategoryLabel').textContent = 'Add Root Category';
+        }
+      });
+
+      document.getElementById('btn_tree_view').addEventListener('click', function() {
+        // Toggle between tree view and flat view
+        const table = document.getElementById('table_categories');
+        const isTreeView = this.classList.contains('active');
+        
+        if (isTreeView) {
+          this.classList.remove('btn-info', 'active');
+          this.classList.add('btn-outline-info');
+          this.innerHTML = '<i class="bi bi-diagram-3"></i> Tree View';
+          // Switch to flat view
+          if (window.categoriesManager) {
+            categoriesManager.table.ajax.url('/api/v1/categories/getAll');
+            categoriesManager.table.ajax.reload();
+          }
+        } else {
+          this.classList.remove('btn-outline-info');
+          this.classList.add('btn-info', 'active');
+          this.innerHTML = '<i class="bi bi-list-nested"></i> Flat View';
+          // Switch to tree view
+          if (window.categoriesManager) {
+            categoriesManager.table.ajax.url('/api/v1/categories/getCategoryTree');
+            categoriesManager.table.ajax.reload();
+          }
+        }
+      });
+
+      document.getElementById('btn_validate_tree').addEventListener('click', function() {
+        // Validate tree structure
+        Utils.request('/api/v1/categories/validateTree', 'GET')
+          .then(response => {
+            if (response.success) {
+              if (response.data.issues && response.data.issues.length > 0) {
+                let issuesText = 'Tree validation found issues:\n';
+                response.data.issues.forEach(issue => {
+                  issuesText += `• ${issue}\n`;
+                });
+                Utils.showToast(issuesText, 'warning');
+              } else {
+                Utils.showToast('Category tree structure is valid', 'success');
+              }
+            } else {
+              Utils.showToast('Error validating tree structure', 'error');
+            }
+          })
+          .catch(error => {
+            console.error('Tree validation error:', error);
+            Utils.showToast('Error validating tree structure', 'error');
+          });
+      });
+
+      // Enhanced statistics loading
+      if (window.categoriesManager) {
+        const originalLoadStatistics = categoriesManager.loadStatistics;
+        categoriesManager.loadStatistics = function() {
+          // Load basic statistics
+          originalLoadStatistics.call(this);
+          
+          // Load tree-specific statistics
+          Utils.request('/api/v1/categories/getTreeStatistics', 'GET')
+            .then(response => {
+              if (response.success && response.data) {
+                const stats = response.data;
+                document.getElementById('root-categories').textContent = stats.root_categories || 0;
+                document.getElementById('max-depth').textContent = stats.max_depth || 0;
+                document.getElementById('leaf-categories').textContent = stats.leaf_categories || 0;
+                document.getElementById('orphaned-categories').textContent = stats.issues || 0;
+                
+                // Update colors based on issues
+                const issuesElement = document.getElementById('orphaned-categories');
+                if (stats.issues > 0) {
+                  issuesElement.style.color = '#dc3545';
+                } else {
+                  issuesElement.style.color = '#28a745';
+                }
+              }
+            })
+            .catch(error => {
+              console.error('Error loading tree statistics:', error);
+            });
+        };
+      }
+    });
+  </script>
+
+</body>
+
+</html>
+</file>
+
+<file path="admin/events/events.js">
+const videoExtensions = ["mp4", "mov", "avi", "mkv", "webm"];
+const imageExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "jfif"];
+const documentExtensions = [
+  "pdf",
+  "doc",
+  "docx",
+  "xls",
+  "xlsx",
+  "ppt",
+  "pptx",
+  "txt",
+];
+
+const {
+  startPicker,
+  endPicker
+} = FlatpickrUtils.createLinkedRangePicker("#dateFrom", "#dateTo");
+
+const eventDateModal = FlatpickrUtils.createSingleDatePicker("#formEvent [name=event_date]");
+
+
+
+startPicker.setData("");
+
+var tableEvents = getAll();
+$("#btnClearDateFilter").click(function () {
+  startPicker.setData("");
+  endPicker.setData("");
+  tableEvents.ajax.reload();
+});
+$("#categoryFilter, #bigEventFilter").change(function () {
+  tableEvents.ajax.reload();
+});
+
+var searchDebounce = debounce(function () {
+  tableEvents.ajax.reload();
+}, 300);
+
+$("#searchInput").on("input", function () {
+  searchDebounce();
+});
+
+$("#btn_open_finder").click(function () {
+  $.colorbox({
+    iframe: true,
+    href:
+      "/assets/plugins/elFinder/elfinder.legacy.html?v=" + new Date().getTime(),
+    width: "80%",
+    height: "80%",
+  });
+});
+
+function getFilesCallback(files) {
+  var newFileData = [];
+  files.forEach(function (el, i) {
+    newFileData.push({
+      is_show: 1,
+      file_path: el.url,
+      media_name: el.name,
+    });
+  });
+
+  var mergeData = getDataFromTableFiles().concat(newFileData);
+
+  refreshFileList(mergeData);
+  updateTableData(mergeData);
+}
+// $('#dateFilter').on("input", function() {
+//   table.ajax.reload();
+// });
+$("#dateTo, #dateFrom, #createByFilter, #updateByFilter, #bigEventFilter").on("change", function () {
+  tableEvents.ajax.reload();
+});
+$("#btnFilter").on("click", function () {
+  tableEvents.ajax.reload();
+});
+
+
+var validator = FormType("#formEvent")
+  .rules({
+    event_name: {
+      required: true,
+    },
+    event_date: {
+      required: true,
+    },
+    description: {
+      required: true,
+    },
+    category_id: {
+      required: true,
+    },
+    media_name: {
+      required: true,
+      minlength: 10,
+    },
+  })
+  .validate();
+
+var fileListUploaded = [];
+const defaultOptions = {
+  deleteUrl: Http().getApiHost("/eventMedia/delete"),
+  uploadUrl: Http().getApiHost("/events/upload"),
+
+  maxTotalFileCount: 200, //Tổng số file
+  allowedFileTypes: ["image", "video"],
+  initialPreviewAsData: true,
+
+  maxFileSize: 2097152,
+  maxFileCount: 100,
+  theme: 'bs5',
+
+  append: true,
+  browseOnZoneClick: true,
+};
+function generateUploadToken() {
+  return Math.random().toString(36).substring(2, 15) +
+    Math.random().toString(36).substring(2, 15);
+}
+var errors = [];
+
+//Setup upload file
+$("#input-id")
+  .fileinput(defaultOptions)
+  .on("fileuploaded", function (event, res, fileId) {
+    var resJson = res.jqXHR.responseJSON;
+    var newFileData = [];
+    if (resJson && resJson.data) {
+      var fileData = resJson.data;
+      if (fileData.file_name && fileData.file_path) {
+        newFileData.push({
+          is_show: 1,
+          file_path: fileData.file_path,
+          media_name: fileData.file_name,
+          fileId: fileId,
+          order: 0
+        });
+        updateTableData(getDataFromTableFiles().concat(newFileData));
+      }
+    }
+  })
+  .on("filedeleted", function (event, key, jqXHR, data) {
+    console.log("deleted", jqXHR.responseJSON);
+    var resJson = jqXHR.responseJSON;
+    Toast.set(resJson).success();
+    var oldData = getDataFromTableFiles();
+    var newData = [];
+
+    oldData.map(function (el, i) {
+      if (resJson.data.file_path != el.file_path) {
+        newData.push(el);
+      }
+    });
+    updateTableData(newData);
+  })
+  .on("fileremoved", function (event, id, index) {
+    console.log("removed all");
+  })
+  .on("fileuploaderror", function (event, data, msg) {
+    //TODO:: when error,
+    console.log(msg);
+  })
+  .on("filesuccessremove", function (event, id) {
+    console.log("filesuccessremove");
+    var oldData = getDataFromTableFiles();
+    var newData = [];
+    oldData.map(function (el, i) {
+      if (id != el.fileId) {
+        newData.push(el);
+      }
+    });
+    updateTableData(newData);
+  })
+  .on(
+    "filebatchuploadcomplete",
+    function (event, preview, config, tags, extraData) {
+      //TODO:: when upload completed then check if had error, upload Area not refresh, but if success all then refresh Area
+      console.log("completed", preview);
+      //truong hop
+
+      var mergeData = getDataFromTableFiles();
+      if (Object.keys(preview).length > 0) {
+        console.log("only update table");
+        updateTableData(mergeData);
+      } else {
+        console.log("only update all");
+        refreshFileList(mergeData);
+        updateTableData(mergeData);
+      }
+    }
+  );
+
+function checkFileType(path) {
+  // Các phần mở rộng cho từng loại file
+
+  // Lấy phần mở rộng file (không phân biệt hoa/thường)
+  const extension = path.split(".").pop().toLowerCase();
+
+  // Kiểm tra loại file
+  if (imageExtensions.includes(extension)) {
+    return "image";
+  } else if (videoExtensions.includes(extension)) {
+    return "video";
+  } else if (documentExtensions.includes(extension)) {
+    return "document";
+  } else {
+    return "unknown"; // Không thuộc loại file nào
+  }
+}
+var validatorMediaName = {};
+
+const tableFiles = $("#table_files").DataTable({
+  data: [],
+  paging: false,
+  rowReorder: {
+    dataSrc: 'order', // Specify the order property
+    selector: '.reorder'    // Allow dragging on the entire row
+  },
+  columnDefs: [
+    { orderable: false, targets: [1, 2, 3, 4, 5] }
+  ],
+  columns: [
+    {
+      data: 'order',
+      className: "text-center align-middle reorder",
+    },
+
+    {
+      data: "media_name",
+      width: "50%",
+      className: "text-center align-middle",
+      render: function (data, type, row, meta) {
+        var formId = meta.row + "_" + new Date().getTime();
+        return `<form id="${formId}"><textarea type="text" name="media_name" class="media_name  form-control" required minlength=10 >${data}</textarea></form>`;
+      },
+    }, // Cột Tên
+    {
+      data: "file_path",
+      className: "text-center align-middle",
+      render: function (data, type, row) {
+        return `<a target="_blank" class="path" data-fileId="${row.fileId ? row.fileId : ""}"
+           href="${data}"><img style="width:90px; height:60px;object-fit:cover;" src="${data}" ></a>`;
+      },
+    }, // Cột Tên
+    {
+      data: "file_path",
+      className: "text-center align-middle reorder",
+      render: function (data) {
+        return checkFileType(data);
+      },
+    },
+    {
+      data: null,
+      className: "text-center align-middle",
+      width: 100,
+      render: function (data, type, row, meta) {
+        var _idEl = "file_" + meta.row;
+        return `<div class="form-check form-switch">
+          <input class="form-check-input large btn_check_file" data-event_id='${row.event_id ? row.event_id : ""}' data-path="${row.file_path}"  
+          type="checkbox" id="checkbox_${_idEl}" ${row.is_show == 1 ? "checked" : ""}
+          >
+          <label class="form-check-label" for="checkbox_${_idEl}"> </label>
+        </div>`;
+      },
+    },
+    {
+      data: null,
+      className: "text-center align-middle",
+      render: function (data, meta, row) {
+        return `<button type="button" 
+          data-media_id="${row.media_id ? row.media_id : ""}"
+          data-event_id="${row.event_id}" 
+          data-file_path="${row.file_path}" 
+          class="btn btn-outline-danger btn_delete_media"> <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" class="bi bi-trash" viewBox="0 0 16 16">
+          <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5m3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0z"/>
+          <path d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4zM2.5 3h11V2h-11z"/>
+          </svg> </button>`;
+      },
+    },
+    // Cột Email
+  ],
+  createdRow: function () {
+    const counts = {
+      video: 0,
+      image: 0,
+      other: 0,
+    };
+
+    const videoExtensions = ["mp4", "mov", "avi", "mkv", "webm"];
+    const imageExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "jfitf"];
+    validatorMediaName = {};
+    setTimeout(function () {
+      $("#table_files form").each(function (i, el) {
+        var formId = $(el).attr("id");
+        validatorMediaName[formId] = FormType("#" + formId)
+          .rules({
+            media_name: {
+              required: true,
+              minlength: 10,
+              maxlength: 1000,
+            },
+          })
+          .validate();
+      });
+      $(".btn_check_file").each(function (i, el) {
+        const ext = $(el).data("path").split(".").pop().toLowerCase();
+        if ($(el).prop("checked")) {
+          if (videoExtensions.includes(ext)) {
+            counts.video++;
+          } else if (imageExtensions.includes(ext)) {
+            counts.image++;
+          } else {
+            counts.other++;
+          }
+        }
+        if (counts.image > 12 && imageExtensions.includes(ext)) {
+          $(el).attr("checked", false);
+        }
+        if (counts.video > 12 && videoExtensions.includes(ext)) {
+          $(el).attr("checked", false);
+        }
+      });
+    }, 500);
+  },
+  drawCallback: function () { },
+});
+$(document).on("click", ".btn_delete_media", function () {
+  var rowSelected = $(this).closest("tr");
+  var rowData = $(this).data();
+
+  var formId = rowSelected.find("form").attr("id");
+  delete validatorMediaName[formId];
+  if (rowData.media_id) {
+    deleteMedia(rowData, function (res) {
+      tableFiles.row(rowSelected).remove().draw();
+      fileListUploaded = [];
+      refreshFileList(tableFiles.rows().data().toArray());
+    });
+  } else {
+    tableFiles.row(rowSelected).remove().draw();
+    fileListUploaded = [];
+    refreshFileList(tableFiles.rows().data().toArray());
+  }
+});
+
+// $("#modalEvent [name=event_name]").on("input", function () {
+//   var index = 0;
+//   $("#table_files tbody tr").each(function (i, el) {
+//     if ($(el).find(".btn_check_file").is(":checked")) {
+//       $(el)
+//         .find(".media_name")
+//         .val($("#modalEvent [name=event_name]").val() + " " + (index + 1));
+//       index++;
+//     }
+//   });
+// });
+
+function checkLimitImage(limit = 12) {
+  const counts = {
+    video: 0,
+    image: 0,
+    other: 0,
+  };
+
+
+
+  $(".btn_check_file").each(function (i, el) {
+    const ext = $(el).data("path").split(".").pop().toLowerCase();
+    if ($(el).prop("checked")) {
+      if (videoExtensions.includes(ext)) {
+        counts.video++;
+      } else if (imageExtensions.includes(ext)) {
+        counts.image++;
+      } else {
+        counts.other++;
+      }
+    }
+  });
+  const imageLimitMessage = "You can publish up to 12 images.";
+  const videoLimitMessage = "You can publish up to 12 videos.";
+
+  if (counts.image > 12) {
+    Popup.set({
+      msg: imageLimitMessage,
+    }).error();
+    return false;
+  }
+  if (counts.video > 12) {
+    Popup.set({
+      msg: videoLimitMessage,
+    }).error();
+    return false;
+  }
+  return true;
+}
+$(document).on("click", ".btn_check_file", function () {
+  if (!checkLimitImage()) {
+    $(".btn_check_file").each(function (i, el) {
+      if (!$(el).prop("checked")) {
+      }
+    });
+
+    $(this).prop("checked", false);
+  }
+});
+$("#btn_publish_all").click(function () {
+  $(".btn_check_file").each(function (i, el) {
+    $(el).prop("checked", true);
+    // if (!$(el).is(":checked")) {
+    //   $(el).click();
+    // }
+  });
+});
+
+function checkEventFile(eventId, path, isChecked) {
+  return 0;
+  if (eventId)
+    Http()
+      .api("/eventMedia/public", {
+        event_id: eventId,
+        file_path: path,
+        is_show: isChecked ? 1 : 0,
+      })
+      .save(function (res) { });
+}
+
+function deleteMedia(data, callback) {
+  if ((data.file_path && data.event_id) || data.media_id)
+    Http().api("/eventMedia/delete", data).save(callback);
+}
+
+function updateTableData(newData = []) {
+  console.log('Original newData:', newData);
+
+  // Validate and renumber order if invalid
+  let isOrderValid = true;
+  const orderValues = newData.map(item => item.order);
+
+  // Check for invalid conditions: duplicates, non-sequential, or missing/invalid values
+  const uniqueOrders = new Set(orderValues);
+  const hasDuplicates = uniqueOrders.size !== orderValues.length;
+  const hasInvalidValues = orderValues.some(val => val == null || isNaN(val) || !Number.isInteger(val));
+  const isSequential = orderValues
+    .map((val, idx) => val === idx)
+    .every(Boolean);
+
+  if (hasDuplicates || hasInvalidValues || !isSequential) {
+    isOrderValid = false;
+    console.log('Invalid order detected. Renumbering order values.');
+  }
+
+  // Create a new array with corrected order values if needed
+  const correctedData = isOrderValid
+    ? newData
+    : newData.map((item, index) => ({
+      ...item,
+      order: index + 1// Assign sequential order (0, 1, 2, ...)
+    }));
+
+  console.log('Corrected newData:', correctedData);
+
+  // Clear old data
+  tableFiles.clear();
+
+  // Add new data
+  tableFiles.rows.add(correctedData);
+
+  // Redraw table
+  tableFiles.draw();
+}
+
+function getDataFromTableFiles() {
+  var media_arr = [];
+
+  // Get all rows in their current order
+  tableFiles.rows({ order: 'applied' }).every(function (rowIdx, tableLoop, rowLoop) {
+    var rowNode = this.node(); // DOM node for the row
+    var rowData = this.data(); // Data object for the row
+    var data = {
+      file_path: rowData.file_path, // From DataTable data
+      fileId: rowData.media_id || '', // From DataTable data, with fallback
+      media_name: $(rowNode).find('.media_name').val(), // From input field
+      is_show: $(rowNode).find('.btn_check_file').is(':checked') ? 1 : 0, // From checkbox
+      oldOrder: rowIdx,
+      order: rowData.order + 1
+    };
+
+    if (data.file_path) {
+      media_arr.push(data);
+    }
+  });
+
+  return media_arr;
+}
+
+
+
+function showDataModal(id) {
+  getEvent(id, function (res) {
+    for (const [key, value] of Object.entries(res)) {
+      $("#modalEvent [name=" + key + "]").val(value);
+    }
+    //fileListUploaded = res.one_drive;
+    eventDateModal.setData(res.event_date);
+    initAjaxTomSelect("#modalEvent [name=category_id]").select2().setValue(res.category_id);
+    tinymce.get('description').setContent(res.description);
+
+    fileListUploaded = [];
+    refreshFileList([]);
+    updateTableData([]);
+    var fileTableData = [];
+    var filePreview = [];
+    if (res.media.length > 0) {
+      res.media.forEach(function (el, i) {
+        filePreview.push(el.file_path);
+        if (el.file_path && el.file_path.split("/").pop() != "description.txt")
+          fileTableData.push({
+            media_id: el.media_id,
+            event_id: id,
+            file_path: el.file_path,
+            media_name: el.media_name
+              ? el.media_name
+              : el.file_path.split("/").pop(),
+            is_show: el.is_show,
+            order: el.order
+          });
+      });
+    }
+    refreshFileList(fileTableData);
+    updateTableData(fileTableData);
+
+    showEventModal();
+  });
+}
+var myModal = new bootstrap.Modal("#modalEvent", {
+  backdrop: "static",
+  keyboard: false,
+});
+
+function getEvent(id, callback) {
+  Http().api(`/events/get?id=${id}`).get(callback);
+}
+
+function showEventModal() {
+  myModal.show();
+  setTimeout(() => {
+    tableFiles.columns.adjust().draw();
+  }, 100);
+}
+
+var myModalEl = document.getElementById("modalEvent");
+myModalEl.addEventListener("hidden.bs.modal", function (event) {
+  tableEvents.ajax.reload(null, false);
+});
+
+function hideEventModal() {
+  myModal.hide();
+  $("#modalEvent").modal("hide");
+}
+
+function refreshFileList(data) {
+  var initialPreview = [];
+  var initialPreviewConfig = [];
+  $(data).each(function (i, el) {
+    initialPreview.push(el.file_path);
+    const key = new Date().getTime();
+    const extra = {
+      id: key,
+      event_id: el.event_id ? el.event_id : "",
+      file_path: el.file_path,
+    };
+    const deleteExtraData = {
+      event_id: el.event_id ? el.event_id : "",
+      file_path: el.file_path,
+    };
+    const name = el.media_name;
+    if (el.file_path.match(/(.doc|.docx|xls|xlsx|ppt|pptx)$/i)) {
+      initialPreviewConfig.push({
+        type: "office",
+        description: "",
+        caption: name,
+        key: key,
+        extra: extra,
+        deleteExtraData: deleteExtraData,
+      });
+    } else if (el.file_path.match(/(.pdf)$/i)) {
+      initialPreviewConfig.push({
+        type: "pdf",
+        description: "",
+        caption: name,
+        key: key,
+        extra: extra,
+        deleteExtraData: deleteExtraData,
+      });
+    } else if (el.file_path.match(/(.mp4)$/i)) {
+      initialPreviewConfig.push({
+        type: "video",
+        description: "",
+        filetype: "video/mp4",
+        downloadUrl: el.file_path,
+        caption: name,
+        key: key,
+        extra: extra,
+        deleteExtraData: deleteExtraData,
+      });
+    } else if (el.file_path.match(/(.txt|.ini|.csv|.java|.php|.js|.css)$/i)) {
+      initialPreviewConfig.push({
+        type: "text",
+        description: "",
+
+        caption: name,
+        key: key,
+        extra: extra,
+        deleteExtraData: deleteExtraData,
+      });
+    } else {
+      initialPreviewConfig.push({
+        previewAsData: true,
+        description: "",
+
+        caption: name,
+        key: key,
+        extra: extra,
+        deleteExtraData: deleteExtraData,
+      });
+    }
+  });
+
+  $("#input-id")
+    .fileinput("destroy")
+    .fileinput(
+      Object.assign(
+        {
+          initialPreview: initialPreview,
+          initialPreviewConfig: initialPreviewConfig,
+        },
+        defaultOptions
+      )
+    );
+}
+
+// Updated category filter using category tree view
+const categoryFilter = initAjaxTomSelect(
+  "#categoryFilter",
+  Http().getApiHost("/categories/getCategoryTree"),
+  function (data) {
+    // Create hierarchical display with indentation
+    const indent = '  '.repeat(data.level || 0);
+    const prefix = data.level > 0 ? '├─ ' : '';
+    const displayName = `${indent}${prefix}${data.category_name}`;
+    
+    return {
+      text: displayName,
+      value: data.category_id,
+      level: data.level,
+      path: data.path,
+      has_children: data.has_children,
+      parent_id: data.parent_id,
+      events_count: data.events_count || 0
+    };
+  },
+  function (res) {
+    return res.data;
+  },
+).params({
+  user_email: localStorage.getItem("email"),
+  include_stats: true
+});
+
+// Updated category modal using category tree view
+const categoryModal = initAjaxTomSelect(
+  "#modalEvent [name=category_id]",
+  Http().getApiHost("/categories/getCategoryTree"),
+  function (data) {
+    // Create hierarchical display with indentation for modal
+    const indent = '  '.repeat(data.level || 0);
+    const prefix = data.level > 0 ? '└─ ' : '';
+    const displayName = `${indent}${prefix}${data.category_name}`;
+    
+    return {
+      text: displayName,
+      value: data.category_id,
+      level: data.level,
+      path: data.path,
+      parent_id: data.parent_id,
+      visibility_status: data.visibility_status
+    };
+  },
+  function (res) {
+    return res.data;
+  },
+).params({
+  user_email: localStorage.getItem("email"),
+  include_hierarchy: true
+});
+
+const createByFilter = initAjaxTomSelect(
+  "#createByFilter",
+  Http().getApiHost("/auth/getUsers"),
+  function (data) {
+    return {
+      text: data.user_name,
+      value: data.user_id + " - " + data.user_name,
+    };
+  },
+
+);
+const updateByFilter = initAjaxTomSelect(
+  "#updateByFilter",
+  Http().getApiHost("/auth/getUsers"),
+  function (data) {
+    return {
+      text: data.user_name,
+      value: data.user_id + " - " + data.user_name,
+    };
+  },
+
+);
+
+createByFilter.select2().load('');
+updateByFilter.select2().load('');
+categoryModal.get();
+categoryFilter.get();
+
+function getAll(
+  callback = function () {
+    LoaderLsts.hide();
+  }
+) {
+  return $("#table_events").DataTable({
+    processing: true,
+    serverSide: true,
+    select: true,
+    searching: false,
+    responsive: true,
+    ajax: {
+      url: Http().getApiHost("events/getAll"),
+      data: function (data) {
+        LoaderLsts.show();
+        data.start_date = startPicker.getData();
+        data.end_date = endPicker.getData();
+        data.category_id = $("#categoryFilter").val();
+        data.include_category_tree = true; // Include category tree data in response
+        data.search = $("#searchInput").val();
+        data.is_big_event = $("#bigEventFilter").val();
+        data.create_by = $("#createByFilter").val();
+        data.update_by = $("#updateByFilter").val();
+        data.is_admin = true;
+      },
+    },
+    lengthMenu: [
+      [10, 25, 100, 500, -1],
+      [10, 25, 100, 500, "All"],
+    ],
+    order: [[0, "desc"]],
+    columns: [
+      {
+        data: "id",
+        name: "id",
+        className: "text-center align-middle",
+      },
+      {
+        data: "event_name",
+        width: "30%",
+        className: "text-left align-middle min-200",
+        render: function (data, meta, row) {
+          const isBigEvent = row.is_big_event == 1;
+          const hasVideo = row.media?.some(m => this.checkFileType(m.file_path) === 'video');
+          const tagsHTML = generateEventTags(isBigEvent, hasVideo);
+          return row.event_name + tagsHTML;
+        },
+      },
+      {
+        data: "event_date",
+        name: "event_date",
+
+        className: " align-middle",
+        render: function (data, meta, row) {
+          return ConvertDate().toVi(data);
+        },
+      },
+      {
+        data: "category_id",
+        name: "category_id",
+        className: "text-left align-middle",
+        render: function (data, meta, row) {
+          // Enhanced category display with hierarchy path
+          let categoryDisplay = row.category_name;
+          
+          // Add category path if available (for better context)
+          if (row.category_path && row.category_path !== row.category_name) {
+            categoryDisplay += `<br><small class="text-muted">${row.category_path}</small>`;
+          }
+          
+          // Add category type indicator
+          if (row.category_type) {
+            const typeClass = {
+              'Root Category': 'bg-primary',
+              'Main Category': 'bg-info', 
+              'Sub Category': 'bg-secondary'
+            }[row.category_type] || 'bg-light';
+            
+            categoryDisplay += ` <span class="badge ${typeClass} ms-1">${row.category_type}</span>`;
+          }
+          
+          return categoryDisplay;
+        },
+      },
+      {
+        data: "category_id",
+        name: "category_id",
+        className: "text-left align-middle",
+        render: function (data, meta, row) {
+          var publicCount = 0;
+          var privateCount = 0;
+          row.media.forEach(function (el) {
+            if (el.is_show == 1) {
+              publicCount += 1;
+            }
+          });
+          return publicCount + "/" + row.media.length;
+        },
+      },
+      {
+        data: "create_by",
+        name: "create_by",
+        width: 150,
+        className: "small align-middle",
+        render: function (data, meta, row) {
+          return data + "<br>" + ConvertDate().toViDateTime(row.created_at);
+        },
+      },
+      {
+        data: "update_by",
+        name: "update_by",
+        width: 150,
+
+        className: "small align-middle",
+
+        render: function (data, meta, row) {
+          return data + "<br>" + ConvertDate().toViDateTime(row.updated_at);
+        },
+      },
+      {
+        data: null,
+        render: function (data, meta, row) {
+          return (
+            `<button data-id=${row.id} onClick=showDataModal(${row.id}) class="btn m-1 btn-primary btn-icon"  > Edit </button>` + 
+            `<button data-id=${row.id} onClick=deleteEvent(${row.id}) class="btn m-1 btn-danger btn-icon"  > Delete </button>` + 
+            `<a target="_blank" href="${Http().getHost("/events/" + dayjs(row.event_date).format('YYYY') + "/" + row.id)}"
+            class="btn btn-link  btn-icon"  > View </a>`
+          );
+        },
+      },
+    ],
+    drawCallback: function () {
+      LoaderLsts.hide();
+    },
+  });
+}
+
+function deleteEvent(id) {
+  Http()
+    .api(`/events/delete?id=${id}`)
+    .get(function (res) {
+      Popup.set(res).success();
+      tableEvents.ajax.reload();
+    });
+}
+
+function eventHasVideo(event) {
+  if (!event.media || !Array.isArray(event.media)) {
+    return false;
+  }
+
+  return event.media.some(media => {
+    const fileType = this.checkFileType(media.file_path);
+    return fileType === 'video';
+  });
+}
+
+// Method tạo HTML cho tags
+function generateEventTags(isBigEvent, hasVideo) {
+  if (!isBigEvent && !hasVideo) {
+    return '';
+  }
+
+  let tagsHTML = '<div class="">';
+
+  if (isBigEvent) {
+    tagsHTML += `
+              <div class="badge border border-warning text-warning">
+                  <span>⭐</span>
+                  <span>Big Event</span>
+              </div>
+          `;
+  }
+
+  if (hasVideo) {
+    tagsHTML += `
+              <div class="badge bg-info">
+                  <span>🎥</span>
+                  <span> Video</span>
+              </div>
+          `;
+  }
+
+  tagsHTML += '</div>';
+  return tagsHTML;
+}
+$("#btn_open_event_modal").click(function () {
+  showEventModal();
+
+  $("#formEvent")[0].reset();
+  initAjaxTomSelect("#modalEvent [name=category_id]").select2().setValue("");
+  fileListUploaded = [];
+  refreshFileList([]);
+  updateTableData([]);
+});
+
+$("#btn_save_event").click(function () {
+  const formData = new FormData($("#formEvent")[0]);
+  formData.set("event_date", eventDateModal.getData());
+
+  const media_arr = getDataFromTableFiles();
+  const content = tinymce.get('description').getContent();
+
+  formData.set("media", JSON.stringify(media_arr));
+  formData.set("description", content);
+  formData.set("event_name", formData.get('event_name').toUpperCase());
+
+  if (validatorMediaName) {
+    for (const [key, value] of Object.entries(validatorMediaName)) {
+      console.log(key, value.valid());
+      if (!value.valid()) {
+        $("#" + key + " [name=media_name]").focus();
+        return;
+      }
+    }
+  }
+
+  if (!validator.valid()) {
+    $("#formEvent .is-invalid").focus();
+    return;
+  }
+
+
+
+  LoaderLsts.show();
+  if (formData.get("id")) {
+    Http()
+      .api("/events/update", formData, function (res) {
+        Popup.set(res).error();
+        LoaderLsts.hide();
+      })
+      .saveForm(function (res) {
+        console.log(res);
+        Popup.set(res).success();
+        tableEvents.ajax.reload(null, false);
+        hideEventModal();
+        LoaderLsts.hide();
+        fileListUploaded = [];
+        refreshFileList([]);
+        updateTableData([]);
+        validator.clear();
+      });
+  } else {
+    Http()
+      .api("/events/store", formData, function (res) {
+        Popup.set(res).error();
+        LoaderLsts.hide();
+      })
+      .saveForm(function (res) {
+        console.log(res);
+        Popup.set(res).success();
+        tableEvents.ajax.reload(null, false);
+        hideEventModal();
+        LoaderLsts.hide();
+        fileListUploaded = [];
+        refreshFileList([]);
+        updateTableData([]);
+        validator.clear();
+      });
+  }
+});
+
+$('#btnExportExcel').on('click', async function () {
+  // Hiển thị loading
+  LoaderLsts.show();
+
+  try {
+    console.log('=== EXPORT DEBUG INFO ===');
+
+    // Tạo URL cho request export
+    const exportUrl = Http().getApiHost('/export/exportEventsToExcel');
+    console.log('Export URL:', exportUrl);
+
+    // Log thông tin token (chỉ hiển thị 10 ký tự đầu cho bảo mật)
+    const token = localStorage.getItem('token') || '';
+    console.log('Token (prefix):', token.substring(0, 10) + '...');
+
+    // Thực hiện request
+    console.log('Sending fetch request...');
+    const response = await fetch(exportUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + token
+      }
+    });
+
+    // Log thông tin response
+    console.log('Response status:', response.status);
+    console.log('Response statusText:', response.statusText);
+    console.log('Response headers:', {
+      'Content-Type': response.headers.get('Content-Type'),
+      'Content-Disposition': response.headers.get('Content-Disposition'),
+      'Content-Length': response.headers.get('Content-Length')
+    });
+
+    // Kiểm tra nếu response không OK
+    if (!response.ok) {
+      // Kiểm tra nếu response là JSON (lỗi)
+      const contentType = response.headers.get('Content-Type') || '';
+      if (contentType.includes('application/json')) {
+        const errorData = await response.json();
+        console.error('Server returned error (JSON):', errorData);
+        throw new Error(errorData.message || `Error ${response.status}: ${response.statusText}`);
+      } else {
+        // Nếu không phải JSON, đọc text
+        const errorText = await response.text();
+        console.error('Server returned error (Text):', errorText);
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+    }
+
+    // Xử lý khi response OK
+    const contentType = response.headers.get('Content-Type') || '';
+    console.log('Processing response with Content-Type:', contentType);
+
+    if (contentType.includes('application/json')) {
+      // Nếu server trả về JSON thay vì file
+      const jsonData = await response.json();
+      console.log('Server returned JSON instead of Excel file:', jsonData);
+      Toast.set({ msg: 'Server không trả về file Excel!' }).error();
+    } else if (contentType.includes('spreadsheetml') ||
+      contentType.includes('application/vnd.openxmlformats') ||
+      contentType.includes('application/octet-stream')) {
+      // Nếu server trả về file Excel
+      console.log('Server returned Excel file - processing download...');
+
+      // Lấy blob từ response
+      const blob = await response.blob();
+      console.log('Blob received:', {
+        size: blob.size + ' bytes',
+        type: blob.type
+      });
+
+      if (blob.size === 0) {
+        console.error('Received empty blob!');
+        throw new Error('File Excel trống!');
+      }
+
+      // Tạo URL cho blob
+      const url = window.URL.createObjectURL(blob);
+      console.log('Blob URL created:', url);
+
+      // Tạo element a để download
+      const link = document.createElement('a');
+      link.href = url;
+
+      // Lấy filename từ Content-Disposition nếu có
+      const disposition = response.headers.get('Content-Disposition') || '';
+      let filename = 'LSTS_Events_Export.xlsx';
+      const filenameMatch = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/.exec(disposition);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1].replace(/['"]/g, '');
+        console.log('Filename from Content-Disposition:', filename);
+      }
+      link.download = filename;
+
+      // Thực hiện download
+      console.log('Triggering download...');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      // Cleanup
+      window.URL.revokeObjectURL(url);
+      console.log('Download complete!');
+
+      Toast.set({ msg: 'Xuất Excel thành công!' }).success();
+    } else {
+      // Nếu Content-Type không phải Excel hoặc JSON
+      console.error('Unexpected Content-Type:', contentType);
+      const responseText = await response.text();
+      console.log('Response content (first 200 chars):', responseText.substring(0, 200));
+      throw new Error('Server trả về định dạng không phải Excel!');
+    }
+  } catch (error) {
+    console.error('Export error:', error);
+    Toast.set({ msg: 'Lỗi xuất Excel: ' + error.message }).error();
+  } finally {
+    LoaderLsts.hide();
+    console.log('=== END EXPORT DEBUG ===');
+  }
+});
+
+
+// Reset file selection function
+function resetFileSelection() {
+  $('#excelFile').val('');
+  $('#fileInfo').hide();
+  $('#btnPreviewExcel').prop('disabled', true);
+  $('#importPreview').hide();
+  $('#btnImportExcel').prop('disabled', true);
+}
+
+// Demo function to trigger modal
+function showImportModal() {
+  $('#importExcelModal').modal('show');
+}
+
+// ========================================
+// Enhanced Category Tree Functionality
+// ========================================
+
+// Enhanced category tree functionality
+function initializeCategoryTreeFeatures() {
+  // Add event listener for category filter changes to show path
+  $('#categoryFilter').on('change', function() {
+    const selectedOption = $(this).find('option:selected');
+    const path = selectedOption.data('path');
+    const eventsCount = selectedOption.data('events-count');
+    
+    if (path && path !== selectedOption.text()) {
+      // Show category path tooltip or info
+      $(this).attr('title', `Path: ${path} (${eventsCount} events)`);
+    }
+  });
+  
+  // Add category stats display to modal
+  $('#modalEvent [name=category_id]').on('change', function() {
+    const selectedOption = $(this).find('option:selected');
+    const path = selectedOption.data('path');
+    const level = selectedOption.data('level');
+    const visibility = selectedOption.data('visibility-status');
+    
+    // Update form text with category info
+    const formText = $(this).siblings('.form-text');
+    if (path && level !== undefined) {
+      formText.html(`
+        <small>
+          <strong>Selected:</strong> ${path}<br>
+          <strong>Level:</strong> ${getCategoryLevelName(level)} | 
+          <strong>Visibility:</strong> ${visibility}
+        </small>
+      `);
+    }
+  });
+}
+
+// Helper function to get category level name
+function getCategoryLevelName(level) {
+  switch(level) {
+    case 0: return 'Root Category';
+    case 1: return 'Main Category';
+    case 2: return 'Sub Category';
+    default: return `Level ${level} Category`;
+  }
+}
+
+// Function to refresh category dropdowns when categories are updated
+function refreshCategoryDropdowns() {
+  if (typeof categoryFilter !== 'undefined') {
+    categoryFilter.select2().load('');
+  }
+  if (typeof categoryModal !== 'undefined') {
+    categoryModal.select2().load('');
+  }
+}
+
+$(document).ready(function() {
+    initializeCategoryTreeFeatures();
+});
+</file>
+
+<file path="admin/events/index.php">
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <?php require_once $_SERVER['DOCUMENT_ROOT'] . "/pages/css.php" ?>
+  <link rel="stylesheet" href="https://cdn.datatables.net/2.1.6/css/dataTables.bootstrap5.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/select2-bootstrap-5-theme@1.3.0/dist/select2-bootstrap-5-theme.min.css">
+
+  <link href="https://cdn.jsdelivr.net/gh/kartik-v/bootstrap-fileinput@5.5.0/css/fileinput.min.css" media="all" rel="stylesheet" type="text/css">
+  <link rel="stylesheet" href="/assets/plugins/colorbox/example1/colorbox.css">
+  <link rel="stylesheet" href="https://cdn.datatables.net/rowreorder/1.5.0/css/rowReorder.dataTables.min.css">
+
+  <title>Admin Portal</title>
+
+  <style>
+    /* Custom style to enlarge checkbox */
+    .form-check-input.large {
+      transform: scale(1.5);
+      /* Increase the size by 1.5 times */
+      margin-left: -1.2em;
+    }
+
+    .reorder {
+      cursor: move;
+    }
+
+    .drag-over {
+      border-color: #007bff !important;
+      background-color: rgba(0, 123, 255, 0.1) !important;
+    }
+
+    .file-drop-zone {
+      border: 2px dashed #dee2e6;
+      border-radius: 8px;
+      padding: 2rem;
+      text-align: center;
+      transition: all 0.3s ease;
+      cursor: pointer;
+    }
+
+    .file-drop-zone:hover {
+      border-color: #adb5bd;
+      background-color: rgba(0, 0, 0, 0.02);
+    }
+
+    .file-info {
+      background-color: #f8f9fa;
+      border-radius: 6px;
+      padding: 0.75rem;
+      margin-top: 1rem;
+    }
+
+
+
+    .progress-container {
+      margin-top: 1rem;
+    }
+
+
+
+    .modal-xl {
+      max-width: 90%;
+    }
+
+    .preview-stats {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+
+    .badge-counter {
+      font-size: 0.9rem;
+      padding: 0.5rem 0.75rem;
+    }
+  </style>
+
+
+  <style>\n    /* Category tree styles */\n    .category-tree-option {\n      font-family: monospace;\n    }\n\n    .category-level-0 {\n      font-weight: bold;\n      color: var(--color-secondary);\n    }\n\n    .category-level-1 {\n      color: #495057;\n    }\n\n    .category-level-2 {\n      color: #6c757d;\n      font-size: 0.9em;\n    }\n\n    .category-path-display {\n      font-size: 0.75rem;\n      color: #6c757d;\n      font-style: italic;\n    }\n\n    .category-stats-badge {\n      font-size: 0.7rem;\n      margin-left: 0.25rem;\n    }\n\n    /* Enhanced select2 styling for hierarchy */\n    .select2-container--bootstrap-5 .select2-results__option[aria-selected] {\n      font-family: monospace;\n    }\n\n    .select2-container--bootstrap-5 .select2-results__option--highlighted {\n      background-color: rgba(158, 239, 225, 0.2) !important;\n    }\n  </style>\n</head>
+
+<body>
+  <?php include __DIR__ . "/../nav.php" ?>
+  <!-- Modal -->
+
+  <div class="modal" id="modalEvent">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="modalEventLabel"> Event</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="formEvent">
+            <div class="row g-2">
+              <div class="col-xl-4 form-group" hidden>
+                <label class="form-label" for="receiver">ID</label>
+                <input type="text" class="form-control" name="id">
+              </div>
+              <div class="col-xl-6 form-group">
+                <label class="form-label" for="receiver">Event Name</label>
+                <input type="text" class="form-control" name="event_name">
+
+
+              </div>
+              <div class="col-xl-3 col-lg-4 form-group">
+                <label class="form-label" for="receiver">Category <span class="text-danger">*</span> <small class="text-muted">(Select from tree)</small></label>
+                <select type="text" name="category_id" required>
+                  <option value="">-- Select Category --</option>
+                </select>
+                <div class="form-text">Choose the most specific category that fits your event</div>
+              </div>
+
+              <div class="col-xl-1 col-lg-4 form-group">
+                <label class="form-label" for="receiver">Big event</label>
+                <select type="text" class="form-control" name="is_big_event">
+                  <option value="" selected>No</option>
+                  <option value="1">Yes</option>
+                </select>
+              </div>
+
+
+
+              <div class="col-xl-2 col-lg-4 form-group">
+                <label class="form-label" for="receiver">Event Date</label>
+                <input type="text" class="form-control" name="event_date">
+
+
+              </div>
+              <div class="col-xl-12 form-group">
+                <label class="form-label" for="receiver">Description</label>
+                <textarea type="text" class="form-control" name="description" id="description"></textarea>
+
+
+              </div>
+
+
+              <div class="col-xl-12 form-group">
+                <input id="input-id" type="file" class="file" multiple>
+              </div>
+
+              <div class="col-xl-12 d-flex align-items-center">
+                <button type="button" class="btn btn-primary me-1" id="btn_publish_all">Publish All</button>
+                <button type="button" class="btn btn-primary me-1" id="btn_open_finder">Open Finder</button>
+
+              </div>
+
+
+
+            </div>
+          </form>
+          <div class="row">
+            <div class="col-xl-12">
+              <table class="w-100 table table-bordered" id="table_files">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Media Name</th>
+                    <th>Preview</th>
+                    <th>Type</th>
+                    <th>Public</th>
+
+                    <th>Delete</th>
+                  </tr>
+                </thead>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-primary" id="btn_save_event">Save Changes</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Import Excel Modal -->
+  <div class="modal fade" id="importExcelModal" tabindex="-1" aria-labelledby="importExcelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+      <div class="modal-content">
+        <div class="modal-header bg-primary text-secondary">
+          <h5 class="modal-title" id="importExcelModalLabel">
+            Import Excel Modal
+          </h5>
+          <button type="button" class="btn-close text-secondary" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Step 1: File Selection -->
+          <h5 class="card-title mb-3 text-secondary">
+            Step 1: File Selection
+          </h5>
+          <div class="row">
+            <div class="col-md-8">
+              <div class="card h-100">
+                <div class="card-body">
+                  <!-- File Drop Zone -->
+                  <div id="excelFileDropZone" class="file-drop-zone">
+                    <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                    <h6>Kéo thả file Excel vào đây hoặc click để chọn</h6>
+                    <p class="text-muted mb-3">Hỗ trợ file .xlsx, .xls (tối đa 10MB)</p>
+                    <input type="file" id="excelFile" class="form-control" accept=".xlsx,.xls" style="display: none;">
+                    <button type="button" class="btn btn-outline-primary" onclick="$('#excelFile').click()">
+                      <i class="fas fa-folder-open"></i> Select file
+                    </button>
+                  </div>
+
+                  <!-- File Info -->
+                  <div id="fileInfo" class="file-info" style="display: none;">
+                    <div class="d-flex align-items-center">
+                      <i class="fas fa-file-excel text-success fa-2x me-3"></i>
+                      <div class="flex-grow-1">
+                        <h6 class="mb-1" id="fileName">filename.xlsx</h6>
+                        <small class="text-muted" id="fileSize">0 KB</small>
+                      </div>
+                      <button type="button" class="btn btn-sm btn-outline-danger" onclick="resetFileSelection()">
+                        <i class="bi bi-x"></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Import Options -->
+                  <div class="mt-3">
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" id="updateExisting">
+                      <label class="form-check-label" for="updateExisting">
+                        Update existing
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-4">
+              <div class="card h-100">
+                <div class="card-header bg-light">
+                  <h6 class="card-title mb-0">
+                    <i class="fas fa-info-circle"></i> Guide
+                  </h6>
+                </div>
+                <div class="card-body">
+                  <div class="alert alert-info">
+                    <small>
+                      <strong>Lưu ý:</strong><br>
+                      • File Excel cần có 2 sheet: "Events" và "Event Media"<br>
+                      • Sử dụng file mẫu để đảm bảo đúng định dạng<br>
+                      • Ngày phải theo định dạng YYYY-MM-DD
+                    </small>
+                  </div>
+
+                  <button type="button" id="btnDownloadTemplate" class="btn btn-outline-success btn-sm w-100 mb-2">
+                    <i class="fas fa-download"></i> Download template
+                  </button>
+
+                  <button type="button" id="btnPreviewExcel" class="btn btn-primary btn-sm w-100" disabled>
+                    <i class="fas fa-eye"></i> Preview data
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 2: Data Preview -->
+          <div id="importPreview" style="display: none;">
+            <hr class="my-4">
+
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="text-secondary mb-0">
+                <i class="fas fa-eye"></i> Step 2: Data Preview
+              </h5>
+              <div class="preview-stats w-50">
+                <div class="row text-center">
+                  <div class="col-6">
+                    <div class="fw-bold" id="eventsCount">0</div>
+                    <small>Sự kiện</small>
+                  </div>
+                  <div class="col-6">
+                    <div class="fw-bold" id="mediaCount">0</div>
+                    <small>Media</small>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Preview Content -->
+            <div id="previewContent" class="preview-container">
+              <!-- Content will be dynamically loaded here -->
+            </div>
+          </div>
+
+          <!-- Step 3: Import Progress -->
+          <div id="importProgress" style="display: none;">
+            <hr class="my-4">
+
+            <h5 class="text-success mb-3">
+              <i class="fas fa-cogs"></i> Step 3: Import Progress
+            </h5>
+
+            <div class="progress-container">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="text-muted">Tiến độ:</span>
+                <span id="importProgressText" class="fw-bold">0/0 (0%)</span>
+              </div>
+
+              <div class="progress mb-3" style="height: 8px;">
+                <div id="importProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                  role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                </div>
+              </div>
+
+              <div class="text-center">
+                <small class="text-muted">
+                  Progress: <span id="currentItem" class="fw-bold">-</span>
+                </small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+            <i class="bi bi-x"></i> Close
+          </button>
+
+          <button type="button" id="btnCancelImport" class="btn btn-warning" style="display: none;">
+            <i class="fas fa-stop"></i> Cancel import
+          </button>
+
+          <button type="button" id="btnImportExcel" class="btn btn-success" disabled>
+            <i class="fas fa-upload"></i> Import excel
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 9999;">
+    <div class="d-flex justify-content-center align-items-center h-100">
+      <div class="text-center text-white">
+        <div class="spinner-border spinner-border-lg" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <div class="mt-2" id="loadingMessage">Đang xử lý...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Success/Error Toast Container -->
+  <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 11000;">
+    <div id="successToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="toast-header bg-success text-white">
+        <i class="fas fa-check-circle me-2"></i>
+        <strong class="me-auto">Thành công</strong>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body" id="successMessage">
+        <!-- Success message here -->
+      </div>
+    </div>
+
+    <div id="errorToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="toast-header bg-danger text-white">
+        <i class="fas fa-exclamation-circle me-2"></i>
+        <strong class="me-auto">Lỗi</strong>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body" id="errorMessage">
+        <!-- Error message here -->
+      </div>
+    </div>
+  </div>
+  <div class="container-xl" style="margin-top:5rem;">
+    <nav aria-label="breadcrumb">
+      <ol class="breadcrumb">
+        <!-- <li class="breadcrumb-item"><a href="#">Admin</a></li> -->
+        <li class="breadcrumb-item active" aria-current="page">
+          <span>Events</span>
+        </li>
+      </ol>
+    </nav>
+    <button type="button" class="btn mb-3 mt-1 btn-primary" id="btn_open_event_modal">
+      Create Event
+    </button>
+    <form id="searchForm" class="mb-4">
+      <div class="row g-3">
+        <div class="col-md-5">
+          <label class="form-label" for="">&nbsp; </label>
+          <div class="input-group">
+            <span class="input-group-text"> <img width="20" src="<?php asset('assets\images\icons\search.svg') ?>" alt="" srcset=""></span>
+            <input type="text" class="form-control" id="searchInput" placeholder="Type event name" aria-label="Search">
+          </div>
+        </div>
+        <div class="col-md-3 form-group">
+          <label class="form-label" for="">Category <small class="text-muted">(Hierarchical)</small></label>
+          <select id="categoryFilter">
+            <option value="">-- All Categories --</option>
+          </select>
+        </div>
+        <div class="col-xl-1 col-md-1 form-group">
+          <label class="form-label" for="receiver">Big Event</label>
+          <select type="text" class="form-control" id="bigEventFilter">
+            <option value="">-- All --</option>
+            <option value="1">Yes</option>
+          </select>
+        </div>
+        <div class="col-xl-3 col-md-3 form-group">
+          <label class="form-label" for="receiver">Create by</label>
+          <select type="text" name="create_by" id="createByFilter">
+          </select>
+        </div>
+
+        <div class="col-xl-3 col-md-3 form-group">
+          <label class="form-label" for="receiver">Update by</label>
+          <select type="text" name="update_by" id="updateByFilter">
+          </select>
+        </div>
+        <div class="col-md-2 form-group">
+          <label class="form-label" for="">From</label>
+          <input type="text" class="form-control" id="dateFrom">
+        </div>
+        <div class="col-md-2 form-group">
+          <label class="form-label" for="">To</label>
+          <input type="text" class="form-control" id="dateTo">
+        </div>
+        <div class="col-md-3 mt-3">
+          <label class="form-label" for="">&nbsp;</label>
+
+          <button type="button" class="btn btn-primary float-end w-100" id="btnFilter"> Filter </button>
+
+        </div>
+        <!-- Thêm vào phần controls -->
+        <div class="col-md-12" data-permission="Event_Admin">
+          <button type="button" class="btn btn-success" id="btnExportExcel">
+            <i class="bi bi-file-earmark-excel"></i>
+            Export Excel
+          </button>
+
+          <button type="button" class="btn btn-primary" onclick="showImportModal()">
+            <i class="fas fa-file-excel"></i> Open Import Modal
+          </button>
+
+
+        </div>
+      </div>
+    </form>
+
+    <table class="table table-hover table-bordered" id="table_events">
+      <thead>
+        <tr class="bg-secondary text-white">
+          <th class="text-center">ID</th>
+          <th class="text-center">Name </th>
+          <th class="text-center">Date</th>
+          <th class="text-center">Category <small>(Path)</small></th>
+          <th class="text-center">Public</th>
+          <th>Create by</th>
+          <th>Update by</th>
+          <th class="text-center"></th>
+
+        </tr>
+      </thead>
+
+    </table>
+
+
+  </div>
+
+  <?php
+  require_once $_SERVER['DOCUMENT_ROOT'] . "/pages/js.php";
+  ?>
+
+  <footer style="min-height: 40vh;"></footer>
+  <script src="https://cdn.datatables.net/2.1.6/js/dataTables.min.js"></script>
+  <script src="https://cdn.datatables.net/2.1.6/js/dataTables.bootstrap5.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/gh/kartik-v/bootstrap-fileinput@5.5.4/js/plugins/buffer.min.js" type="text/javascript"></script>
+  <script src="https://cdn.jsdelivr.net/gh/kartik-v/bootstrap-fileinput@5.5.4/js/plugins/filetype.min.js" type="text/javascript"></script>
+
+  <script src="https://cdn.jsdelivr.net/gh/kartik-v/bootstrap-fileinput@5.5.4/js/plugins/piexif.min.js" type="text/javascript"></script>
+  <script src="https://cdn.jsdelivr.net/gh/kartik-v/bootstrap-fileinput@5.5.4/js/plugins/sortable.min.js" type="text/javascript"></script>
+
+  <script src="/assets/plugins/bootstrap-fileinput-5.5.4/js/fileinput.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/kartik-v/bootstrap-fileinput@5.5.0/js/locales/LANG.js"></script>
+
+  <script src="https://cdn.datatables.net/rowreorder/1.5.0/js/dataTables.rowReorder.min.js"></script>
+  <script src="/assets/plugins/colorbox/jquery.colorbox-min.js"></script>
+  <script src="/assets/plugins/tinymce/js/tinymce/tinymce.min.js"></script>
+  <script src="/assets/plugins/exceljs/dist/exceljs.min.js"></script>
+  <script src="/assets/js/utils.js"></script>
+
+  <script src="/assets/js/FlatpickrUtils.js"></script>
+  <script src="/assets/js/DataImporter.js"></script>
+  <script src="/assets/js/ExcelUtility.js?v=<?php echo time() ?>"></script>
+  <script>
+    tinymce.init({
+      selector: '#description',
+      license_key: 'gpl',
+      branding: false,
+      // --- BẮT ĐẦU CẤU HÌNH FONT ---
+      content_style: `
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        
+        body {
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+        }
+      `
+      // --- KẾT THÚC CẤU HÌNH FONT ---
+    });
+  </script>
+  <script>
+    /**
+     * Complete Events Import Manager
+     * Integrates ExcelUtility and DataImporter for seamless import workflow
+     */
+    const EventsImportManager = (function() {
+
+      // Configuration
+      const CONFIG = {
+        previewEndpoint: '/api/import/preview',
+        importEventEndpoint: '/events/import',
+        importMediaEndpoint: '/eventMedia/import',
+        templateEndpoint: '/api/import/template',
+        maxFileSize: 10 * 1024 * 1024, // 10MB
+        allowedTypes: [
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'application/vnd.ms-excel'
+        ]
+      };
+
+      // State management
+      let currentFile = null;
+      let previewData = null;
+      let importInProgress = false;
+
+      /**
+       * Initialize the import manager
+       */
+      function initialize() {
+        setupEventListeners();
+        setupUI();
+        console.log('EventsImportManager initialized');
+      }
+
+      /**
+       * Setup event listeners for import functionality
+       */
+      function setupEventListeners() {
+        // File input change
+        $(document).on('change', '#excelFile', handleFileSelect);
+
+        // Preview button
+        $(document).on('click', '#btnPreviewExcel', handlePreviewRequest);
+
+        // Import button
+        $(document).on('click', '#btnImportExcel', handleImportRequest);
+
+        // Download template button
+        $(document).on('click', '#btnDownloadTemplate', handleTemplateDownload);
+
+        // Cancel import button
+        $(document).on('click', '#btnCancelImport', handleCancelImport);
+
+        // Modal events
+        $(document).on('hidden.bs.modal', '#importExcelModal', resetImportState);
+      }
+
+      /**
+       * Setup UI components
+       */
+      function setupUI() {
+        // Add drag and drop functionality
+        const dropZone = $('#excelFileDropZone');
+        if (dropZone.length) {
+          setupDragAndDrop(dropZone);
+        }
+      }
+
+      /**
+       * Setup drag and drop functionality
+       */
+      function setupDragAndDrop(dropZone) {
+        dropZone.on('dragover', function(e) {
+          e.preventDefault();
+          $(this).addClass('drag-over');
+        });
+
+        dropZone.on('dragleave', function(e) {
+          e.preventDefault();
+          $(this).removeClass('drag-over');
+        });
+
+        dropZone.on('drop', function(e) {
+          e.preventDefault();
+          $(this).removeClass('drag-over');
+
+          const files = e.originalEvent.dataTransfer.files;
+          if (files.length > 0) {
+            handleFileSelect({
+              target: {
+                files: files
+              }
+            });
+          }
+        });
+      }
+
+      /**
+       * Handle file selection
+       */
+      async function handleFileSelect(event) {
+        const file = event.target.files[0];
+
+        if (!file) {
+          resetFileState();
+          return;
+        }
+
+        try {
+          // Validate file
+          validateFile(file);
+
+          // Store file reference
+          currentFile = file;
+
+          // Update UI
+          updateFileInfo(file);
+          enablePreviewButton();
+
+          console.log('File selected:', file.name);
+        } catch (error) {
+          showError(error.message);
+          resetFileState();
+        }
+      }
+
+      /**
+       * Validate selected file
+       */
+      function validateFile(file) {
+        // Check file type
+        if (!CONFIG.allowedTypes.includes(file.type)) {
+          throw new Error('Chỉ chấp nhận file Excel (.xlsx, .xls)');
+        }
+
+        // Check file size
+        if (file.size > CONFIG.maxFileSize) {
+          throw new Error('File quá lớn. Kích thước tối đa 10MB');
+        }
+
+        // Check file name
+        if (file.name.length > 255) {
+          throw new Error('Tên file quá dài');
+        }
+      }
+
+      /**
+       * Update file information display
+       */
+      function updateFileInfo(file) {
+        const fileInfo = $('#fileInfo');
+        const fileName = $('#fileName');
+        const fileSize = $('#fileSize');
+
+        if (fileInfo.length) {
+          fileName.text(file.name);
+          fileSize.text(formatFileSize(file.size));
+          fileInfo.show();
+        }
+      }
+
+      /**
+       * Format file size for display
+       */
+      function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      }
+
+      /**
+       * Handle preview request
+       */
+      async function handlePreviewRequest() {
+        if (!currentFile) {
+          showError('Vui lòng chọn file Excel');
+          return;
+        }
+
+        try {
+          showLoading('Đang xử lý file...');
+
+          // Use ExcelUtility to read and validate file
+          const excelData = await ExcelUtility.readExcel(currentFile, {
+            readAllSheets: true
+          });
+
+          // if (excelData.errors.length > 0) {
+          //   throw new Error(excelData.errors.join('\n'));
+          // }
+
+          // Store preview data
+          previewData = excelData;
+
+          // Display preview
+          displayPreview(excelData);
+          enableImportButton();
+
+          showSuccess('Xem trước dữ liệu thành công');
+        } catch (error) {
+          showError('Lỗi xử lý file: ' + error.message);
+          console.error('Preview error:', error);
+        } finally {
+          hideLoading();
+        }
+      }
+
+      /**
+       * Display data preview
+       */
+      function displayPreview(data) {
+
+        let html = '<div class="preview-container">';
+
+        $('#eventsCount').text(data["Events"].length);
+        $('#mediaCount').text(data["Event Media"].length);
+        // Events preview
+        if (data["Events"] && data["Events"].length > 0) {
+          html += '<div class="mb-4">';
+          html += '<div class="table-responsive">';
+          html += '<table id="eventsPreviewTable" class="table table-bordered table-striped">';
+          html += '<thead class="table-dark">';
+          html += '<tr><th>Tên sự kiện</th><th>Ngày</th><th>Loại</th><th>Mô tả</th><th>Sự kiện lớn</th></tr>';
+          html += '</thead><tbody>';
+
+          data["Events"].forEach(event => {
+            html += `<tr>
+                    <td>${escapeHtml(event.event_name)}</td>
+                    <td>${event.event_date}</td>
+                    <td>${escapeHtml(event.type)}</td>
+                    <td>${escapeHtml(event.description.substring(0, 100))}${event.description.length > 100 ? '...' : ''}</td>
+                    <td><span class="badge ${event.is_big_event == 1 ? 'bg-success' : 'bg-secondary'}">${event.is_big_event == 1 ? "Yes" : "No"}</span></td>
+                </tr>`;
+          });
+
+          html += '</tbody></table></div></div>';
+        }
+
+        // Media preview
+        if (data["Event Media"] && data["Event Media"].length > 0) {
+          html += '<div class="mb-4">';
+          html += '<div class="table-responsive">';
+          html += '<table id="mediaPreviewTable" class="table table-bordered table-striped">';
+          html += '<thead class="table-dark">';
+          html += '<tr><th>ID</th><th>Tên sự kiện</th><th>Đường dẫn file</th><th>Hiển thị</th><th>Thứ tự</th></tr>';
+          html += '</thead><tbody>';
+
+          data["Event Media"].forEach(media => {
+            html += `<tr>
+                    <td>${media.media_id || 'Auto'}</td>
+                    <td>${escapeHtml(media.media_name || '')}</td>
+                    <td><code>${escapeHtml(media.file_path)}</code></td>
+                    <td><span class="badge ${media.is_show ? 'bg-success' : 'bg-secondary'}">${media.is_show}</span></td>
+                    <td>${media.order}</td>
+                </tr>`;
+          });
+
+          html += '</tbody></table></div></div>';
+        }
+
+        // Warnings
+        if (data.warnings && data.warnings.length > 0) {
+          html += '<div class="alert alert-warning">';
+          html += '<h6><i class="fas fa-exclamation-triangle"></i> Cảnh báo:</h6>';
+          html += '<ul class="mb-0">';
+          data.warnings.forEach(warning => {
+            html += `<li>${escapeHtml(warning)}</li>`;
+          });
+          html += '</ul></div>';
+        }
+
+        html += '</div>';
+
+        $('#previewContent').html(html);
+        $('#importPreview').show();
+
+        // Initialize DataTables
+        initializeDataTables();
+      }
+
+      /**
+       * Initialize DataTables for preview
+       */
+      function initializeDataTables() {
+        // Common DataTable options
+        const options = {
+          responsive: true,
+          pageLength: 10,
+        };
+
+        // Initialize tables
+        if ($('#eventsPreviewTable').length) {
+          $('#eventsPreviewTable').DataTable({
+            ...options,
+            order: [
+              [1, 'desc']
+            ] // Sort by date
+          });
+        }
+
+        if ($('#mediaPreviewTable').length) {
+          $('#mediaPreviewTable').DataTable({
+            ...options,
+            order: [
+              [0, 'asc']
+            ] // Sort by event ID
+          });
+        }
+      }
+
+      /**
+       * Handle import request
+       */
+      async function handleImportRequest() {
+        if (!previewData) {
+          showError('Vui lòng xem trước dữ liệu trước khi import');
+          return;
+        }
+
+        // Confirm import
+        if (!confirm('Bạn có chắc chắn muốn import dữ liệu này không?')) {
+          return;
+        }
+
+
+        importInProgress = true;
+        updateImportUI(true);
+
+        const updateExisting = $('#updateExisting').is(':checked');
+
+
+        const events = previewData['Events'];
+        const media = previewData['Event Media'];
+        // Start import process using DataImporter
+        var progress = 0;
+        DataImporter.start(events, {
+          endpoint: CONFIG.importEventEndpoint,
+          parallel: true,
+          batchSize: 5,
+          delay: 200,
+          onComplete: (results) => {
+            console.log(`Import complete! Success rate: ${(results.successRate * 100).toFixed(2)}%`);
+            var progress = 0;
+
+            handleImportComplete({
+              events: results
+            });
+            DataImporter.start(media, {
+              endpoint: CONFIG.importMediaEndpoint,
+              parallel: true,
+              batchSize: 150,
+              delay: 200,
+              onComplete: (results) => {
+                console.log(`Import complete! Success rate: ${(results.successRate * 100).toFixed(2)}%`);
+                updateImportUI(false);
+                importInProgress = false;
+                handleImportComplete({
+                  events: results
+                });
+              },
+              onEachResponse: (item, error) => {
+                updateProgressDisplay(progress++, media.length, item);
+              },
+              onEachError: (item, error) => {
+                handleImportError(error);
+                console.error(`Failed to import ${item.name}: ${error.message}`);
+              }
+            });
+          },
+          onEachResponse: (item, error) => {
+            updateProgressDisplay(progress++, events.length, item);
+          },
+          onEachError: (item, error) => {
+            console.error(`Failed to import ${item.name}: ${error.message}`);
+          }
+        });
+
+
+
+
+      }
+
+      /**
+       * Handle import completion
+       */
+      function handleImportComplete(results) {
+        const successCount = results.events?.success.length || 0 + results.media?.success.length || 0;
+        const errorCount = results.events?.errors.length || 0 + results.media?.errors.length || 0;
+
+        showSuccess(`Import hoàn thành! ${successCount} thành công, ${errorCount} lỗi`);
+
+        // Close modal
+        $('#importExcelModal').modal('hide');
+
+        // Refresh data if callback exists
+        if (typeof refreshTable === 'function') {
+          refreshTable();
+        }
+
+        // Trigger custom event
+        $(document).trigger('eventsImported', [results]);
+      }
+
+      /**
+       * Handle import error
+       */
+      function handleImportError(error) {
+        console.error('Import error:', error);
+        showError('Lỗi import: ' + error.message);
+      }
+
+      /**
+       * Handle template download
+       */
+      async function handleTemplateDownload() {
+        try {
+          showLoading('Đang tạo file mẫu...');
+
+          const blob = await ExcelUtility.exportTemplate();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+
+          a.href = url;
+          a.download = 'Import_Events_Template.xlsx';
+          document.body.appendChild(a);
+          a.click();
+
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+
+          showSuccess('Tải file mẫu thành công');
+        } catch (error) {
+          showError('Lỗi tải file mẫu: ' + error.message);
+        } finally {
+          hideLoading();
+        }
+      }
+
+      /**
+       * Handle import cancellation
+       */
+      function handleCancelImport() {
+        if (importInProgress) {
+          DataImporter.cancel();
+          showInfo('Đã hủy quá trình import');
+        }
+      }
+
+      /**
+       * Update import UI state
+       */
+      function updateImportUI(importing) {
+        console.log(importing);
+        $('#btnImportExcel').prop('disabled', importing);
+        $('#btnPreviewExcel').prop('disabled', importing);
+        $('#excelFile').prop('disabled', importing);
+
+        if (importing) {
+          $('#btnImportExcel').html('<i class="fas fa-spinner fa-spin"></i> Đang import...');
+          $('#importProgress').show();
+        } else {
+          $('#btnImportExcel').html('<i class="fas fa-upload"></i> Import dữ liệu');
+          $('#importProgress').hide();
+        }
+      }
+
+      /**
+       * Update progress display
+       */
+      function updateProgressDisplay(current, total, item) {
+        const percentage = Math.round((current / total) * 100);
+
+        console.log(percentage);
+        $('#importProgressBar').css('width', percentage + '%').attr('aria-valuenow', percentage);
+        $('#importProgressText').text(`${current}/${total} (${percentage}%)`);
+
+        if (item) {
+          $('#currentItem').text(item.name || item.id || 'Unknown');
+        }
+      }
+
+      /**
+       * Utility functions
+       */
+      function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+      }
+
+      function resetFileState() {
+        currentFile = null;
+        $('#fileInfo').hide();
+        disablePreviewButton();
+        resetPreviewState();
+      }
+
+      function resetPreviewState() {
+        previewData = null;
+        $('#importPreview').hide();
+        disableImportButton();
+      }
+
+      function resetImportState() {
+        resetFileState();
+        resetPreviewState();
+        updateImportUI(false);
+        hideLoading();
+      }
+
+      function enablePreviewButton() {
+        $('#btnPreviewExcel').prop('disabled', false);
+      }
+
+      function disablePreviewButton() {
+        $('#btnPreviewExcel').prop('disabled', true);
+      }
+
+      function enableImportButton() {
+        $('#btnImportExcel').prop('disabled', false);
+      }
+
+      function disableImportButton() {
+        $('#btnImportExcel').prop('disabled', true);
+      }
+
+      function showLoading(message = 'Đang xử lý...') {
+        if (typeof LoaderLsts !== 'undefined') {
+          LoaderLsts.show();
+        }
+      }
+
+      function hideLoading() {
+        if (typeof LoaderLsts !== 'undefined') {
+          LoaderLsts.hide();
+        }
+      }
+
+      function showSuccess(message) {
+        if (typeof Toast !== 'undefined') {
+          Toast.set({
+            msg: message
+          }).success();
+        } else {
+          console.log('Success:', message);
+        }
+      }
+
+      function showError(message) {
+        if (typeof Toast !== 'undefined') {
+          Toast.set({
+            msg: message
+          }).error();
+        } else {
+          console.error('Error:', message);
+        }
+      }
+
+      function showInfo(message) {
+        if (typeof Toast !== 'undefined') {
+          Toast.set({
+            msg: message
+          }).info();
+        } else {
+          console.info('Info:', message);
+        }
+      }
+
+      // Public API
+      return {
+        initialize,
+        handleFileSelect,
+        handlePreviewRequest,
+        handleImportRequest,
+        handleTemplateDownload,
+        resetImportState,
+
+        // Getters
+        getCurrentFile: () => currentFile,
+        getPreviewData: () => previewData,
+        isImportInProgress: () => importInProgress
+      };
+
+    })();
+
+    // Initialize when DOM is ready
+    $(document).ready(function() {
+      EventsImportManager.initialize();
+    });
+
+    // Export for global usage
+    window.EventsImportManager = EventsImportManager;
+  </script>
+  <script src="/pages/admin/events/events.js?v=<?php echo time(); ?>"></script>
+</body>
+
+</html>
+</file>
+
+<file path="admin/login.php">
+<!DOCTYPE html>
+<html lang="en">
+
+
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LSTS Admin Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --color-primary: #9eefe1;
+            --color-secondary: #1b4664;
+            --white: #ffffff;
+            --light-gray: #f8f9fa;
+            --dark-gray: #333333;
+            --medium-gray: #666666;
+            --border-radius-sm: 8px;
+            --border-radius-md: 15px;
+            --border-radius-lg: 20px;
+            --border-radius-xl: 25px;
+            --border-radius-round: 50px;
+            --transition-fast: 0.3s ease;
+            --transition-slow: 0.4s ease;
+            --shadow-sm: 0 4px 15px rgba(0, 0, 0, 0.1);
+            --shadow-md: 0 10px 30px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.2);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background:
+                linear-gradient(135deg, rgba(158, 239, 225, 0.8) 0%, rgba(255, 255, 255, 0.9) 100%),
+                url('/assets/images/background-main.jpg') center/cover fixed;
+            min-height: 100vh;
+            color: var(--color-secondary);
+            font-weight: 400;
+            line-height: 1.6;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .login-container {
+            max-width: 480px;
+            width: 100%;
+            position: relative;
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        .login-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: var(--border-radius-xl);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(158, 239, 225, 0.3);
+            box-shadow: var(--shadow-lg);
+            padding: 40px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+            border-radius: var(--border-radius-xl) var(--border-radius-xl) 0 0;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .login-title {
+            color: var(--color-secondary);
+            font-size: clamp(1.8rem, 4vw, 2.2rem);
+            font-weight: 800;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .login-subtitle {
+            color: var(--color-secondary);
+            font-size: 1.1rem;
+            opacity: 0.8;
+            font-weight: 500;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+            position: relative;
+        }
+
+        .form-label {
+            color: var(--color-secondary);
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 15px 20px;
+            border: 2px solid rgba(158, 239, 225, 0.3);
+            border-radius: var(--border-radius-md);
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--color-secondary);
+            transition: var(--transition-fast);
+            font-family: inherit;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--color-primary);
+            background: var(--white);
+            box-shadow: 0 0 0 4px rgba(158, 239, 225, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .form-control::placeholder {
+            color: var(--medium-gray);
+            opacity: 0.7;
+        }
+
+        .login-btn {
+            width: 100%;
+            background: var(--color-primary);
+            color: var(--color-secondary);
+            border: 2px solid var(--white);
+            padding: 16px 28px;
+            border-radius: var(--border-radius-round);
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 700;
+            transition: var(--transition-fast);
+            box-shadow: var(--shadow-sm);
+            font-family: inherit;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-top: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .login-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+            transition: var(--transition-fast);
+        }
+
+        .login-btn:hover:not(:disabled) {
+            background: var(--white);
+            color: var(--color-secondary);
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-lg);
+            border-color: var(--color-primary);
+        }
+
+        .login-btn:hover:not(:disabled)::before {
+            left: 100%;
+        }
+
+        .login-btn:active {
+            transform: translateY(-1px);
+        }
+
+        .login-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading-spinner {
+            border: 3px solid rgba(27, 70, 100, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid var(--color-secondary);
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 10px;
+        }
+
+        .back-to-home {
+            position: absolute;
+            top: -60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--color-secondary);
+            border: 2px solid var(--color-primary);
+            padding: 12px 24px;
+            border-radius: var(--border-radius-round);
+            text-decoration: none;
+            font-weight: 600;
+            transition: var(--transition-fast);
+            backdrop-filter: blur(10px);
+            box-shadow: var(--shadow-sm);
+            font-size: 14px;
+        }
+
+        .back-to-home:hover {
+            background: var(--color-primary);
+            color: var(--color-secondary);
+            transform: translateX(-50%) translateY(-2px);
+            box-shadow: var(--shadow-md);
+            text-decoration: none;
+        }
+
+        .error-message {
+            background: rgba(244, 67, 54, 0.1);
+            border: 1px solid rgba(244, 67, 54, 0.3);
+            color: #d32f2f;
+            padding: 12px 16px;
+            border-radius: var(--border-radius-md);
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            display: none;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .success-message {
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+            color: #388e3c;
+            padding: 12px 16px;
+            border-radius: var(--border-radius-md);
+            margin-bottom: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            display: none;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .input-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--medium-gray);
+            font-size: 18px;
+            pointer-events: none;
+            transition: var(--transition-fast);
+        }
+
+        .form-control:focus+.input-icon {
+            color: var(--color-primary);
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .login-card {
+                padding: 30px 25px;
+            }
+
+            .login-title {
+                font-size: 1.6rem;
+            }
+
+            .back-to-home {
+                position: static;
+                transform: none;
+                margin-bottom: 20px;
+                display: inline-block;
+                width: 100%;
+                text-align: center;
+            }
+
+            .back-to-home:hover {
+                transform: translateY(-2px);
+            }
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--color-primary);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--color-secondary);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="login-container">
+        <a href="/" class="back-to-home">← Back to Home</a>
+
+        <div class="login-card">
+            <div class="login-header">
+                <h1 class="login-title">Lawrence S.Ting School</h1>
+                <p class="login-subtitle">Admin Portal</p>
+            </div>
+
+            <div id="errorMessage" class="error-message"></div>
+            <div id="successMessage" class="success-message"></div>
+
+            <form id="formLogin">
+                <div class="form-group">
+                    <label for="inputUsername" class="form-label">Email Address</label>
+                    <div style="position: relative;">
+                        <input
+                            type="email"
+                            class="form-control"
+                            id="inputUsername"
+                            name="username"
+                            placeholder="admin@lsts.edu.vn"
+                            required
+                            autocomplete="username">
+                        <span class="input-icon">📧</span>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="inputPassword" class="form-label">Password</label>
+                    <div style="position: relative;">
+                        <input
+                            type="password"
+                            class="form-control"
+                            id="inputPassword"
+                            name="password"
+                            placeholder="Enter your password"
+                            required
+                            autocomplete="current-password">
+                        <span class="input-icon">🔒</span>
+                    </div>
+                </div>
+
+                <button type="submit" class="login-btn" id="loginBtn">
+                    <span id="loginBtnText">Đăng Nhập</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="/assets/js/utils.js"></script>
+    <script>
+        // Enhanced Login Script với Session Management
+        document.addEventListener('DOMContentLoaded', function() {
+            // Check if already logged in through session
+
+            checkExistingSession();
+            // Form submission handler
+            const loginForm = document.getElementById('formLogin');
+            if (loginForm) {
+                loginForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    login();
+                });
+            }
+
+            // Add input focus animations
+            document.querySelectorAll('.form-control').forEach(input => {
+                input.addEventListener('focus', function() {
+                    this.parentElement.style.transform = 'scale(1.02)';
+                    this.parentElement.style.transition = 'transform 0.2s ease';
+                });
+
+                input.addEventListener('blur', function() {
+                    this.parentElement.style.transform = 'scale(1)';
+                });
+            });
+
+            // Add keyboard shortcut for login (Enter)
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    const loginBtn = document.getElementById('loginBtn');
+                    if (loginBtn && !loginBtn.disabled) {
+                        login();
+                    }
+                }
+            });
+        });
+
+        /**
+         * Check if user is already logged in
+         */
+        async function checkExistingSession() {
+            try {
+                const response = await fetch('/api/check-session', {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success && data.logged_in) {
+                    // User is already logged in, redirect to dashboard
+                    showSuccess('Already logged in. Redirecting...');
+                    setTimeout(() => {
+                        window.location.href = '/admin/events';
+                    }, 1000);
+                }
+            } catch (error) {
+                console.log('No existing session found');
+                // This is normal for login page, user needs to login
+            }
+        }
+
+        /**
+         * Main login function
+         */
+        async function login() {
+            const loginBtn = document.getElementById('loginBtn');
+            const loginBtnText = document.getElementById('loginBtnText');
+            const errorMessage = document.getElementById('errorMessage');
+            const successMessage = document.getElementById('successMessage');
+
+            // Hide previous messages
+            hideMessage(errorMessage);
+            hideMessage(successMessage);
+
+            // Validate inputs
+            const username = document.getElementById('inputUsername').value.trim();
+            const password = document.getElementById('inputPassword').value;
+
+            if (!username) {
+                showError('Please enter your email address');
+                return;
+            }
+
+            if (!password) {
+                showError('Please enter your password');
+                return;
+            }
+
+            // Show loading state
+            loginBtn.disabled = true;
+            loginBtnText.innerHTML = '<span class="loading-spinner"></span>Đang đăng nhập...';
+
+            try {
+                await loginWithAPI(username, password);
+            } catch (error) {
+                console.error('Login error:', error);
+                showError(error.message || 'Login failed. Please try again.');
+            } finally {
+                // Reset button state
+                setTimeout(() => {
+                    loginBtn.disabled = false;
+                    loginBtnText.textContent = 'Login';
+                }, 2000);
+            }
+        }
+
+        /**
+         * Login with API call
+         */
+        async function loginWithAPI(username, password) {
+            try {
+                const loginData = {
+                    username: username,
+                    password: password,
+                    login_as: "staff"
+                };
+
+                // Call login API
+                const response = await fetch('/api/v1/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: new URLSearchParams(loginData),
+                    credentials: 'same-origin'
+                });
+
+                const result = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(result.msg || result.message || 'Login failed');
+                }
+
+                if (!result.success) {
+                    throw new Error(result.msg || result.message || 'Login failed');
+                }
+                localStorage.setItem('token', result.data.token);
+                localStorage.setItem('user_name', result.data.user_name);
+                localStorage.setItem('user_id', result.data.user_id);
+                localStorage.setItem('email', result.data.email);
+                // Login successful
+                console.log('Login successful:', result);
+                showSuccess('Login successful! Redirecting...');
+
+                // Get permissions after successful login
+                try {
+                    await getPermissions();
+                } catch (permError) {
+                    console.warn('Failed to get permissions:', permError);
+                    // Continue anyway, permissions are not critical for redirect
+                }
+
+                // Redirect to dashboard/admin after short delay
+                setTimeout(() => {
+                    const redirectUrl = result.redirect || '/admin/events';
+                    window.location.href = redirectUrl;
+                }, 500);
+
+            } catch (error) {
+                console.error('Login API error:', error);
+
+                // Handle specific error cases
+                if (error.message.includes('Invalid username or password')) {
+                    showError('Invalid email or password. Please check your credentials.');
+                } else if (error.message.includes('SERVER ERROR')) {
+                    showError('Server error. Please try again later.');
+                } else {
+                    showError(error.message || 'Login failed. Please try again.');
+                }
+
+                throw error;
+            }
+        }
+
+        /**
+         * Get user permissions
+         */
+        async function getPermissions() {
+            try {
+                const response = await fetch('/api/v1/auth/getPermissions', {
+                    method: 'GET',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    credentials: 'same-origin'
+                });
+
+                const result = await response.json();
+
+                if (response.ok && result.success) {
+                    console.log('Permissions loaded:', result.data);
+                    localStorage.setItem('permissions', JSON.stringify(result.data));
+                } else {
+                    console.warn('Failed to load permissions:', result.message);
+                }
+
+            } catch (error) {
+                console.warn('Error getting permissions:', error);
+                // Don't throw error, permissions are not critical
+            }
+        }
+
+        /**
+         * Show error message
+         */
+        function showError(message) {
+            const errorMessage = document.getElementById('errorMessage');
+            if (!errorMessage) return;
+
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            errorMessage.style.opacity = '0';
+            errorMessage.style.transition = 'opacity 0.3s ease';
+
+            // Fade in
+            setTimeout(() => {
+                errorMessage.style.opacity = '1';
+            }, 10);
+
+            // Auto hide after 5 seconds
+            setTimeout(() => {
+                hideMessage(errorMessage);
+            }, 5000);
+        }
+
+        /**
+         * Show success message
+         */
+        function showSuccess(message) {
+            const successMessage = document.getElementById('successMessage');
+            if (!successMessage) return;
+
+            successMessage.textContent = message;
+            successMessage.style.display = 'block';
+            successMessage.style.opacity = '0';
+            successMessage.style.transition = 'opacity 0.3s ease';
+
+            // Fade in
+            setTimeout(() => {
+                successMessage.style.opacity = '1';
+            }, 10);
+        }
+
+        /**
+         * Hide message element
+         */
+        function hideMessage(element) {
+            if (!element) return;
+
+            element.style.opacity = '0';
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 300);
+        }
+
+        /**
+         * Form validation helpers
+         */
+        function validateEmail(email) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return emailRegex.test(email);
+        }
+
+        function validateForm() {
+            const username = document.getElementById('inputUsername').value.trim();
+            const password = document.getElementById('inputPassword').value;
+
+            if (!username) {
+                showError('Email address is required');
+                return false;
+            }
+
+            if (!validateEmail(username)) {
+                showError('Please enter a valid email address');
+                return false;
+            }
+
+            if (!password) {
+                showError('Password is required');
+                return false;
+            }
+
+            if (password.length < 6) {
+                showError('Password must be at least 6 characters long');
+                return false;
+            }
+
+            return true;
+        }
+
+        /**
+         * Enhanced login with validation
+         */
+        async function loginEnhanced() {
+            // Validate form first
+            if (!validateForm()) {
+                return;
+            }
+
+            // Proceed with login
+            await login();
+        }
+
+        /**
+         * Show/hide password functionality
+         */
+        function togglePasswordVisibility() {
+            const passwordInput = document.getElementById('inputPassword');
+            const toggleBtn = document.querySelector('.password-toggle');
+
+            if (!passwordInput || !toggleBtn) return;
+
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleBtn.innerHTML = '👁️';
+                toggleBtn.setAttribute('aria-label', 'Hide password');
+            } else {
+                passwordInput.type = 'password';
+                toggleBtn.innerHTML = '👁️‍🗨️';
+                toggleBtn.setAttribute('aria-label', 'Show password');
+            }
+        }
+
+        /**
+         * Handle network errors gracefully
+         */
+        function handleNetworkError(error) {
+            console.error('Network error:', error);
+
+            if (!navigator.onLine) {
+                showError('No internet connection. Please check your network and try again.');
+            } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                showError('Unable to connect to server. Please try again later.');
+            } else {
+                showError('Network error occurred. Please try again.');
+            }
+        }
+    </script>
+</body>
+
+</html>
+</file>
+
+<file path="admin/nav.php">
+<style>
+  @import '/assets/styles/variables.css';
+  @import '/assets/styles/utilities.css';
+
+  /* Admin Navbar Styles */
+  .admin-navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 70px;
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(15px);
+    border-bottom: 1px solid rgba(158, 239, 225, 0.3);
+    box-shadow: var(--shadow-sm);
+    z-index: 1000;
+    transition: var(--transition-fast);
+  }
+
+  .navbar-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+    gap: 2rem;
+  }
+
+  /* Brand Section */
+  .navbar-brand-section {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  .navbar-logo {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+  }
+
+  .logo-img {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-sm);
+  }
+
+  .navbar-title {
+    color: var(--color-secondary);
+    font-weight: 700;
+    font-size: 1.1rem;
+    white-space: nowrap;
+  }
+
+  /* Desktop Menu */
+  .desktop-menu {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    justify-content: center;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    color: var(--color-secondary);
+    text-decoration: none;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    transition: var(--transition-fast);
+    white-space: nowrap;
+  }
+
+  .nav-link:hover {
+    background: var(--color-primary);
+    color: var(--color-secondary);
+    transform: translateY(-2px);
+  }
+
+  /* User Section */
+  .navbar-user {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .user-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    border-radius: var(--radius-md);
+    transition: var(--transition-fast);
+  }
+
+  .user-info:hover {
+    background: rgba(158, 239, 225, 0.1);
+  }
+
+  .user-name {
+    color: var(--color-secondary);
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+
+  .user-avatar {
+    width: 32px;
+    height: 32px;
+    background: var(--color-primary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--color-white);
+  }
+
+  /* User Dropdown */
+  .user-dropdown {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: var(--color-white);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    border: 1px solid rgba(158, 239, 225, 0.3);
+    min-width: 150px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: var(--transition-fast);
+  }
+
+  .user-info:hover+.user-dropdown,
+  .user-dropdown:hover {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+    color: var(--color-secondary);
+    text-decoration: none;
+    transition: var(--transition-fast);
+  }
+
+  .dropdown-item:hover {
+    background: var(--color-primary);
+    color: var(--color-secondary);
+    border-radius: var(--radius-sm);
+  }
+
+  /* Mobile Toggle */
+  .mobile-toggle {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    gap: 4px;
+  }
+
+  .hamburger-line {
+    width: 100%;
+    height: 4.5px;
+    background: var(--color-secondary);
+    border-radius: 2px;
+    transition: var(--transition-fast);
+  }
+
+  /* Mobile Menu */
+  .mobile-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--color-white);
+    border-top: 1px solid rgba(158, 239, 225, 0.3);
+    box-shadow: var(--shadow-lg);
+    transform: translateY(-100%);
+    opacity: 0;
+    visibility: hidden;
+    transition: var(--transition-fast);
+    max-height: calc(100vh - 70px);
+    overflow-y: auto;
+  }
+
+  .mobile-menu.active {
+    transform: translateY(0);
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .mobile-nav-link {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    color: var(--color-secondary);
+    text-decoration: none;
+    border-bottom: 1px solid rgba(158, 239, 225, 0.2);
+    transition: var(--transition-fast);
+  }
+
+  .mobile-nav-link:hover {
+    background: var(--color-primary);
+    color: var(--color-secondary);
+  }
+
+  .mobile-nav-divider {
+    height: 1px;
+    background: rgba(158, 239, 225, 0.3);
+    margin: 0.5rem 0;
+  }
+
+  .logout-link {
+    color: #dc3545;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+
+    .desktop-menu,
+    .user-dropdown {
+      display: none;
+    }
+
+    .mobile-toggle {
+      display: flex;
+    }
+
+    .navbar-title {
+      display: none;
+    }
+
+    .user-info {
+      padding: 0.5rem;
+    }
+
+    .user-name {
+      display: none;
+    }
+  }
+
+  /* Active states */
+  .mobile-toggle.active .hamburger-line:nth-child(1) {
+    transform: rotate(45deg) translate(6px, 6px);
+  }
+
+  .mobile-toggle.active .hamburger-line:nth-child(2) {
+    opacity: 0;
+  }
+
+  .mobile-toggle.active .hamburger-line:nth-child(3) {
+    transform: rotate(-45deg) translate(6px, -6px);
+  }
+
+  /* Active navigation item */
+  .nav-link.active,
+  .mobile-nav-link.active {
+    background: var(--color-primary);
+    color: var(--color-secondary);
+    font-weight: 600;
+  }
+
+  .nav-link.active i,
+  .mobile-nav-link.active i {
+    transform: scale(1.1);
+  }
+
+  /* Icon Styling */
+  .nav-link i,
+  .mobile-nav-link i,
+  .dropdown-item i {
+    font-size: 1.1rem;
+    width: 20px;
+    text-align: center;
+    transition: var(--transition-fast);
+  }
+
+  /* User Avatar Styling */
+  .user-avatar {
+    width: 32px;
+    height: 32px;
+    background: var(--color-primary);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid var(--color-white);
+  }
+
+  .user-avatar i {
+    font-size: 1.2rem;
+    color: var(--color-secondary);
+  }
+
+  /* Icon hover effects */
+  .nav-link:hover i {
+    transform: scale(1.1);
+  }
+
+  .dropdown-item:hover i {
+    transform: translateX(2px);
+  }
+
+  /* Mobile icon adjustments */
+  .mobile-nav-link i {
+    font-size: 1.2rem;
+    width: 24px;
+  }
+
+  /* Logout icon color */
+  .logout-link i {
+    color: #dc3545;
+  }
+</style>
+<nav class="admin-navbar">
+  <div class="navbar-container">
+    <!-- Logo & Brand -->
+    <div class="navbar-brand-section">
+      <a href="/" class="navbar-logo">
+        <img src="/assets/images/logo.svg" alt="LSTS" class="logo-img">
+      </a>
+      <span class="navbar-title">Admin Portal</span>
+    </div>
+
+    <!-- Desktop Menu -->
+    <div class="navbar-menu desktop-menu">
+      <a href="/events" class="nav-link">
+        <i class="bi bi-house-door"></i>
+        <span>Back to Events</span>
+      </a>
+      <a href="/admin/events/" class="nav-link" data-page="events">
+        <i class="bi bi-calendar-event"></i>
+        <span>Events</span>
+      </a>
+      <a href="/admin/categories/" class="nav-link" data-page="categories" data-permission="Root_Admin|Event_Admin">
+        <i class="bi bi-tags"></i>
+        <span>Categories</span>
+      </a>
+      <a href="/admin/auth/" class="nav-link" data-page="auth" data-permission="Root_Admin|Event_Admin">
+        <i class="bi bi-people"></i>
+        <span>Users</span>
+      </a>
+    </div>
+
+    <!-- User Section -->
+    <div class="navbar-user">
+      <div class="user-info" id="userInfo">
+        <span class="user-name" id="userName">Loading...</span>
+        <div class="user-avatar">
+          <i class="bi bi-person-circle"></i>
+        </div>
+      </div>
+
+      <!-- User Dropdown Menu -->
+      <div class="user-dropdown" id="userDropdown">
+        <a href="#" class="dropdown-item" data-auth-action="logout">
+          <i class="bi bi-box-arrow-right"></i>
+          <span>Logout</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- Mobile Toggle -->
+    <button class="mobile-toggle" id="mobileToggle">
+      <span class="hamburger-line"></span>
+      <span class="hamburger-line"></span>
+      <span class="hamburger-line"></span>
+    </button>
+  </div>
+
+  <!-- Mobile Menu -->
+  <div class="mobile-menu" id="mobileMenu">
+    <a href="/events" class="mobile-nav-link">
+      <i class="bi bi-house-door"></i>
+      <span>Back to Events</span>
+    </a>
+    <a href="/admin/events/" class="mobile-nav-link" data-page="events">
+      <i class="bi bi-calendar-event"></i>
+      <span>Events</span>
+    </a>
+    <a href="/admin/categories/" class="mobile-nav-link" data-page="categories" data-permission="Root_Admin|Event_Admin">
+      <i class="bi bi-tags"></i>
+      <span>Categories</span>
+    </a>
+    <a href="/admin/auth/" class="mobile-nav-link" data-page="auth" data-permission="Root_Admin|Event_Admin">
+      <i class="bi bi-people"></i>
+      <span>Users</span>
+    </a>
+    <div class="mobile-nav-divider"></div>
+    <a href="#" class="mobile-nav-link logout-link" data-auth-action="logout">
+      <i class="bi bi-box-arrow-right"></i>
+      <span>Logout</span>
+    </a>
+  </div>
+</nav>
+
+<script>
+  class AdminNavbar {
+    constructor() {
+      this.mobileToggle = document.getElementById('mobileToggle');
+      this.mobileMenu = document.getElementById('mobileMenu');
+      this.userInfo = document.getElementById('userInfo');
+      this.userName = document.getElementById('userName');
+
+      this.init();
+    }
+
+    init() {
+      this.loadUserInfo();
+      this.bindEvents();
+      this.setActiveNavItem();
+    }
+
+    loadUserInfo() {
+      const userName = localStorage.getItem('user_name') || 'Admin User';
+      if (this.userName) {
+        this.userName.textContent = userName;
+      }
+    }
+
+    bindEvents() {
+      // Mobile menu toggle
+      if (this.mobileToggle) {
+        this.mobileToggle.addEventListener('click', () => {
+          this.toggleMobileMenu();
+        });
+      }
+
+      // Close mobile menu when clicking outside
+      document.addEventListener('click', (e) => {
+        if (!e.target.closest('.admin-navbar')) {
+          this.closeMobileMenu();
+        }
+      });
+
+      // Close mobile menu when window resizes
+      window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+          this.closeMobileMenu();
+        }
+      });
+    }
+
+    toggleMobileMenu() {
+      this.mobileToggle.classList.toggle('active');
+      this.mobileMenu.classList.toggle('active');
+    }
+
+    closeMobileMenu() {
+      this.mobileToggle.classList.remove('active');
+      this.mobileMenu.classList.remove('active');
+    }
+
+    setActiveNavItem() {
+      // Get current path
+      const currentPath = window.location.pathname;
+      
+      // Remove active class from all nav items
+      document.querySelectorAll('.nav-link, .mobile-nav-link').forEach(link => {
+        link.classList.remove('active');
+      });
+      
+      // Set active class based on current page
+      let activeSelector = '';
+      
+      if (currentPath.includes('/admin/events')) {
+        activeSelector = '[data-page="events"]';
+      } else if (currentPath.includes('/admin/categories')) {
+        activeSelector = '[data-page="categories"]';
+      } else if (currentPath.includes('/admin/auth')) {
+        activeSelector = '[data-page="auth"]';
+      }
+      
+      if (activeSelector) {
+        document.querySelectorAll(activeSelector).forEach(link => {
+          link.classList.add('active');
+        });
+      }
+    }
+  }
+
+  // Initialize when DOM is ready
+  document.addEventListener('DOMContentLoaded', () => {
+    new AdminNavbar();
+  });
+</script>
+</file>
+
+</files>

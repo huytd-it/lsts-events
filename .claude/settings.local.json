@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php artisan migrate:*)",
+      "Bash(php artisan:*)",
+      "Bash(curl:*)",
+      "Bash(php:*)",
+      "Bash(pkill:*)",
+      "Bash(true)",
+      "Bash(npm run build:*)",
+      "Bash(npm install:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "WebFetch(domain:chonky.io)"
+    ],
+    "deny": []
+  }
+}

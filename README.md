@@ -1,5 +1,13 @@
 # Qwen Code - Project Development Notes
-
+```
+  1. Mở browser: http://localhost:8000
+  2. Sẽ redirect tới: /login (vì chưa authenticated)
+  3. Login với:
+    - Email: admin@lsts.edu.vn
+    - Password: admin123
+  4. Sau login sẽ redirect tới: Dashboard
+  
+  ```
 ## Project Overview
 This document contains notes and instructions for the Laravel + React + Vite project development.
 

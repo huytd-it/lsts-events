@@ -63,7 +63,7 @@ class EventController extends Controller
 
         // Add media for each event
         foreach ($events->items() as $event) {
-            $event->media = EventMedia::where('event_id', $event->id)
+            $event->media = EventMedia::where('event_id', $event->event_id)
                 ->where('is_show', 1)
                 ->whereNull('deleted_at')
                 ->orderBy('order')
@@ -128,7 +128,7 @@ class EventController extends Controller
 
             // Process media files if provided
             if ($request->has('media') && is_array($request->media)) {
-                $this->processEventMedia($event->id, $request->media, $folderPath);
+                $this->processEventMedia($event->event_id, $request->media, $folderPath);
             }
 
             DB::commit();
@@ -165,7 +165,7 @@ class EventController extends Controller
         }
 
         // Get event media
-        $mediaQuery = EventMedia::where('event_id', $id)
+        $mediaQuery = EventMedia::where('event_id', $event->event_id)
             ->whereNull('deleted_at')
             ->orderBy('order');
 
@@ -245,7 +245,9 @@ class EventController extends Controller
 
             // Process media files if provided
             if ($request->has('media') && is_array($request->media)) {
-                $this->processEventMedia($event->id, $request->media, $newFolderPath);
+                // Clear existing media first for update
+                EventMedia::where('event_id', $event->event_id)->delete();
+                $this->processEventMedia($event->event_id, $request->media, $newFolderPath);
             }
 
             DB::commit();
@@ -438,16 +440,60 @@ class EventController extends Controller
      */
     private function processEventMedia($eventId, $mediaData, $folderPath): void
     {
-        foreach ($mediaData as $media) {
+        // Validate event ID
+        if (!$eventId) {
+            \Log::error('processEventMedia: Event ID is null or empty', [
+                'eventId' => $eventId,
+                'mediaData' => $mediaData
+            ]);
+            throw new \Exception('Event ID is required for media processing');
+        }
+
+        \Log::info('processEventMedia: Processing media', [
+            'eventId' => $eventId,
+            'mediaCount' => count($mediaData),
+            'folderPath' => $folderPath
+        ]);
+
+        foreach ($mediaData as $index => $media) {
+            // Skip if media doesn't have file_path
+            if (!isset($media['file_path']) || empty($media['file_path'])) {
+                \Log::warning('processEventMedia: Skipping media without file_path', [
+                    'index' => $index,
+                    'media' => $media
+                ]);
+                continue;
+            }
+
+            // Check if this is existing media (has media_id) or new media
+            if (isset($media['media_id']) && $media['media_id']) {
+                // Update existing media
+                $existingMedia = EventMedia::find($media['media_id']);
+                if ($existingMedia) {
+                    $existingMedia->update([
+                        'media_name' => $media['media_name'] ?? $existingMedia->media_name,
+                        'is_show' => $media['is_show'] ?? $existingMedia->is_show,
+                        'order' => $media['order'] ?? $existingMedia->order
+                    ]);
+                    \Log::info('processEventMedia: Updated existing media', ['media_id' => $media['media_id']]);
+                }
+                continue;
+            }
+
             $newFilePath = $this->moveFileToEventFolder($media['file_path'], $folderPath);
             
-            EventMedia::create([
+            $mediaRecord = [
                 'event_id' => $eventId,
                 'file_path' => $newFilePath,
                 'file_name' => $media['file_name'] ?? basename($newFilePath),
+                'media_name' => $media['media_name'] ?? $media['file_name'] ?? basename($newFilePath),
                 'is_show' => $media['is_show'] ?? 1,
                 'order' => $media['order'] ?? 0
-            ]);
+            ];
+
+            \Log::info('processEventMedia: Creating new media record', $mediaRecord);
+            
+            EventMedia::create($mediaRecord);
         }
     }
 

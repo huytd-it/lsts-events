@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Upload, Table, Button, Space, Switch, Input, message, Image, Tag, Tooltip } from 'antd';
+import { Upload, Table, Button, Space, Switch, Input, message, Image, Tag, Tooltip, Modal, Tabs } from 'antd';
 import { 
   UploadOutlined, 
   DeleteOutlined, 
@@ -9,7 +9,9 @@ import {
   FileImageOutlined,
   VideoCameraOutlined,
   FileTextOutlined,
-  MenuOutlined
+  MenuOutlined,
+  CloudServerOutlined,
+  PlusOutlined
 } from '@ant-design/icons';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from '@dnd-kit/sortable';
@@ -92,6 +94,9 @@ const MediaManager = ({
   accept = "image/*,video/*,.pdf,.doc,.docx"
 }) => {
   const [draggedIndex, setDraggedIndex] = useState(-1);
+  const [isServerModalOpen, setIsServerModalOpen] = useState(false);
+  const [serverFiles, setServerFiles] = useState([]);
+  const [selectedServerFiles, setSelectedServerFiles] = useState([]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -317,24 +322,115 @@ const MediaManager = ({
   const visibleImages = visibleFiles.filter(file => getFileType(file.name || file.file_name) === 'image');
   const visibleVideos = visibleFiles.filter(file => getFileType(file.name || file.file_name) === 'video');
 
+  // Handle server file selection
+  const handleSelectFromServer = () => {
+    // Get files from localStorage (set by FileExplorer)
+    const savedFiles = localStorage.getItem('selectedServerFiles');
+    let serverFilesFromStorage = [];
+    
+    if (savedFiles) {
+      try {
+        serverFilesFromStorage = JSON.parse(savedFiles);
+      } catch (e) {
+        console.error('Error parsing saved files:', e);
+      }
+    }
+
+    // Combine with mock files
+    const mockFiles = [
+      {
+        id: 'mock1',
+        name: 'default-banner.jpg',
+        path: '/uploads/events/default-banner.jpg',
+        url: '/storage/uploads/events/default-banner.jpg',
+        type: 'image/jpeg',
+        size: 245760
+      },
+      {
+        id: 'mock2', 
+        name: 'sample-video.mp4',
+        path: '/uploads/media/sample-video.mp4',
+        url: '/storage/uploads/media/sample-video.mp4',
+        type: 'video/mp4',
+        size: 15728640
+      }
+    ];
+
+    setServerFiles([...mockFiles, ...serverFilesFromStorage]);
+    setIsServerModalOpen(true);
+  };
+
+  const handleAddServerFiles = () => {
+    const selectedFiles = serverFiles.filter(file => selectedServerFiles.includes(file.id));
+    const newFiles = selectedFiles.map(file => ({
+      uid: `server-${file.id}`,
+      name: file.name,
+      file_name: file.name,
+      file_path: file.path,
+      media_name: file.name,
+      is_show: 1,
+      order: fileList.length,
+      url: file.url,
+      type: file.type,
+      size: file.size
+    }));
+
+    const newFileList = [...fileList, ...newFiles];
+    if (validateFileLimits(newFileList)) {
+      if (onChange) {
+        onChange(newFileList);
+      }
+      message.success(`Đã thêm ${newFiles.length} file từ server`);
+      setIsServerModalOpen(false);
+      setSelectedServerFiles([]);
+    }
+  };
+
   return (
     <div className="media-manager">
-      {/* Upload Area */}
-      <Upload.Dragger
-        multiple
-        beforeUpload={handleUpload}
-        showUploadList={false}
-        accept={accept}
-        style={{ marginBottom: 16 }}
-      >
-        <p className="ant-upload-drag-icon">
-          <UploadOutlined />
-        </p>
-        <p className="ant-upload-text">Kéo thả file vào đây hoặc click để chọn</p>
-        <p className="ant-upload-hint">
-          Hỗ trợ hình ảnh, video và tài liệu. Tối đa {maxImageFiles} hình ảnh và {maxVideoFiles} video.
-        </p>
-      </Upload.Dragger>
+      <Tabs
+        defaultActiveKey="upload"
+        items={[
+          {
+            key: 'upload',
+            label: 'Upload mới',
+            children: (
+              <Upload.Dragger
+                multiple
+                beforeUpload={handleUpload}
+                showUploadList={false}
+                accept={accept}
+                style={{ marginBottom: 16 }}
+              >
+                <p className="ant-upload-drag-icon">
+                  <UploadOutlined />
+                </p>
+                <p className="ant-upload-text">Kéo thả file vào đây hoặc click để chọn</p>
+                <p className="ant-upload-hint">
+                  Hỗ trợ hình ảnh, video và tài liệu. Tối đa {maxImageFiles} hình ảnh và {maxVideoFiles} video.
+                </p>
+              </Upload.Dragger>
+            )
+          },
+          {
+            key: 'server',
+            label: 'Chọn từ server',
+            children: (
+              <div className="text-center py-8">
+                <CloudServerOutlined className="text-4xl text-gray-400 mb-4" />
+                <p className="text-gray-600 mb-4">Chọn file có sẵn trên server</p>
+                <Button 
+                  type="primary" 
+                  icon={<PlusOutlined />}
+                  onClick={handleSelectFromServer}
+                >
+                  Duyệt file server
+                </Button>
+              </div>
+            )
+          }
+        ]}
+      />
 
       {/* Statistics */}
       {fileList.length > 0 && (
@@ -375,6 +471,90 @@ const MediaManager = ({
           </SortableContext>
         </DndContext>
       )}
+
+      {/* Server File Selection Modal */}
+      <Modal
+        title="Chọn file từ server"
+        open={isServerModalOpen}
+        onCancel={() => {
+          setIsServerModalOpen(false);
+          setSelectedServerFiles([]);
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => setIsServerModalOpen(false)}>
+            Hủy
+          </Button>,
+          <Button 
+            key="select" 
+            type="primary" 
+            onClick={handleAddServerFiles}
+            disabled={selectedServerFiles.length === 0}
+          >
+            Thêm {selectedServerFiles.length} file(s)
+          </Button>
+        ]}
+        width={800}
+      >
+        <Table
+          dataSource={serverFiles}
+          rowKey="id"
+          rowSelection={{
+            selectedRowKeys: selectedServerFiles,
+            onChange: (selectedRowKeys) => setSelectedServerFiles(selectedRowKeys),
+          }}
+          columns={[
+            {
+              title: 'Xem trước',
+              dataIndex: 'url',
+              key: 'preview',
+              width: 80,
+              render: (url, record) => {
+                if (record.type.startsWith('image/')) {
+                  return (
+                    <Image
+                      width={50}
+                      height={35}
+                      src={url}
+                      style={{ objectFit: 'cover', borderRadius: 4 }}
+                    />
+                  );
+                }
+                return getFileIcon(getFileType(record.name));
+              }
+            },
+            {
+              title: 'Tên file',
+              dataIndex: 'name',
+              key: 'name',
+            },
+            {
+              title: 'Loại',
+              dataIndex: 'type',
+              key: 'type',
+              width: 100,
+              render: (type) => {
+                const fileType = getFileType(type);
+                const colors = { image: 'green', video: 'blue', document: 'orange' };
+                const labels = { image: 'Hình', video: 'Video', document: 'Tài liệu' };
+                return <Tag color={colors[fileType] || 'default'}>{labels[fileType] || 'Khác'}</Tag>;
+              }
+            },
+            {
+              title: 'Kích thước',
+              dataIndex: 'size',
+              key: 'size',
+              width: 100,
+              render: (size) => {
+                const k = 1024;
+                const sizes = ['B', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(size) / Math.log(k));
+                return parseFloat((size / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+              }
+            }
+          ]}
+          pagination={{ pageSize: 8 }}
+        />
+      </Modal>
     </div>
   );
 };

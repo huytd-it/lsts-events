@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Table, Button, Space, Tag, message, Modal, Form, Input, DatePicker, Select, Upload, TimePicker, Switch, Card, Row, Col, Statistic, Divider } from 'antd';
+import { Table, Button, Space, Tag, message, Modal, Form, Input, DatePicker, Select, Upload, Switch, Card, Row, Col, Statistic, Divider } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ExclamationCircleOutlined, UploadOutlined, SearchOutlined, FilterOutlined, FileImageOutlined, VideoCameraOutlined, ApartmentOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { eventService, categoryService } from '../api/services';
@@ -153,7 +153,6 @@ const Events = () => {
     form.setFieldsValue({
       event_name: record.event_name,
       event_date: dayjs(record.event_date),
-      event_time: record.event_time ? dayjs(record.event_time, 'HH:mm:ss') : null,
       location: record.location,
       description: record.description,
       category_id: record.category_id,
@@ -221,7 +220,6 @@ const Events = () => {
       const formData = {
         event_name: values.event_name,
         event_date: values.event_date.format('YYYY-MM-DD'),
-        event_time: values.event_time ? values.event_time.format('HH:mm') : null,
         location: values.location,
         description: values.description,
         category_id: values.category_id,
@@ -257,13 +255,6 @@ const Events = () => {
       sorter: (a, b) => new Date(a.event_date) - new Date(b.event_date),
       render: (date) => dayjs(date).format('DD/MM/YYYY'),
       width: 120,
-    },
-    {
-      title: 'Giờ',
-      dataIndex: 'event_time',
-      key: 'event_time',
-      render: (time) => time ? dayjs(time, 'HH:mm:ss').format('HH:mm') : '-',
-      width: 80,
     },
     {
       title: 'Địa điểm',
@@ -491,7 +482,6 @@ const Events = () => {
       <Modal
         title={editingEvent ? 'Sửa Sự Kiện' : 'Thêm Sự Kiện'}
         open={isModalOpen}
-        
         onCancel={() => {
           setIsModalOpen(false);
           setEditingEvent(null);
@@ -499,163 +489,162 @@ const Events = () => {
           form.resetFields();
         }}
         footer={null}
-        width={600}
+        width={1200}
+        style={{ top: 20 }}
+        bodyStyle={{ maxHeight: 'calc(100vh - 120px)', overflowY: 'auto' }}
       >
-        <Form
-          form={form}
-          layout="vertical"
-          onFinish={handleSubmit}
-          className="mt-4"
-        >
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left Column - Event Information */}
           <div className="space-y-4">
-            <Form.Item
-              name="event_name"
-              label={<span className="text-sm font-medium text-gray-700">Tên sự kiện</span>}
-              rules={[
-                { required: true, message: 'Vui lòng nhập tên sự kiện!' },
-                { min: 5, message: 'Tên sự kiện phải có ít nhất 5 ký tự!' }
-              ]}
-            >
-              <Input
-                placeholder="Nhập tên sự kiện"
-                className="rounded-lg border-gray-300 hover:border-blue-400 focus:border-blue-500"
-                size="large"
-              />
-            </Form.Item>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Form.Item
-                name="event_date"
-                label={<span className="text-sm font-medium text-gray-700">Ngày sự kiện</span>}
-                rules={[
-                  { required: true, message: 'Vui lòng chọn ngày sự kiện!' }
-                ]}
+            <Card title="Thông tin sự kiện" size="small" className="h-fit">
+              <Form
+                form={form}
+                layout="vertical"
+                onFinish={handleSubmit}
+                className="space-y-3"
               >
-                <DatePicker
-                  className="w-full rounded-lg border-gray-300 hover:border-blue-400 focus:border-blue-500"
-                  placeholder="Chọn ngày sự kiện"
-                  format="DD/MM/YYYY"
-                  size="large"
-                  disabledDate={(current) => current && current < dayjs().startOf('day')}
-                />
-              </Form.Item>
+                <Form.Item
+                  name="event_name"
+                  label={<span className="text-sm font-medium text-gray-700">Tên sự kiện</span>}
+                  rules={[
+                    { required: true, message: 'Vui lòng nhập tên sự kiện!' },
+                    { min: 5, message: 'Tên sự kiện phải có ít nhất 5 ký tự!' }
+                  ]}
+                  className="mb-3"
+                >
+                  <Input 
+                    placeholder="Nhập tên sự kiện" 
+                    className="rounded-lg"
+                    size="large"
+                  />
+                </Form.Item>
 
-              <Form.Item
-                name="event_time"
-                label={<span className="text-sm font-medium text-gray-700">Giờ sự kiện</span>}
-              >
-                <TimePicker
-                  className="w-full rounded-lg border-gray-300 hover:border-blue-400 focus:border-blue-500"
-                  placeholder="Chọn giờ sự kiện"
-                  format="HH:mm"
-                  size="large"
-                />
-              </Form.Item>
-            </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Form.Item
+                    name="event_date"
+                    label={<span className="text-sm font-medium text-gray-700">Ngày sự kiện</span>}
+                    rules={[
+                      { required: true, message: 'Vui lòng chọn ngày sự kiện!' }
+                    ]}
+                    className="mb-3"
+                  >
+                    <DatePicker
+                      className="w-full rounded-lg"
+                      placeholder="Chọn ngày sự kiện"
+                      format="DD/MM/YYYY"
+                      size="large"
+                      disabledDate={(current) => current && current < dayjs().startOf('day')}
+                    />
+                  </Form.Item>
 
-            <Form.Item
-              name="location"
-              label={<span className="text-sm font-medium text-gray-700">Địa điểm</span>}
-              rules={[
-                { required: true, message: 'Vui lòng nhập địa điểm!' }
-              ]}
-            >
-              <Input
-                placeholder="Nhập địa điểm tổ chức"
-                className="rounded-lg border-gray-300 hover:border-blue-400 focus:border-blue-500"
-                size="large"
-              />
-            </Form.Item>
+                  <Form.Item
+                    name="category_id"
+                    label={<span className="text-sm font-medium text-gray-700">Danh mục</span>}
+                    rules={[
+                      { required: true, message: 'Vui lòng chọn danh mục!' }
+                    ]}
+                    className="mb-3"
+                  >
+                    <Select 
+                      placeholder="Chọn danh mục sự kiện"
+                      loading={categoriesLoading}
+                      className="rounded-lg"
+                      size="large"
+                      options={categories.map(cat => ({
+                        value: cat.category_id,
+                        label: cat.category_name
+                      }))}
+                    />
+                  </Form.Item>
+                </div>
 
-            <Form.Item
-              name="category_id"
-              label={<span className="text-sm font-medium text-gray-700">Danh mục</span>}
-              rules={[
-                { required: true, message: 'Vui lòng chọn danh mục!' }
-              ]}
-            >
-              <Select
-                placeholder="Chọn danh mục sự kiện"
-                loading={categoriesLoading}
-                className="rounded-lg"
-                size="large"
-                options={categories.map(cat => ({
-                  value: cat.category_id,
-                  label: cat.category_name
-                }))}
-              />
-            </Form.Item>
+                <Form.Item
+                  name="location"
+                  label={<span className="text-sm font-medium text-gray-700">Địa điểm</span>}
+                  rules={[
+                    { required: true, message: 'Vui lòng nhập địa điểm!' }
+                  ]}
+                  className="mb-3"
+                >
+                  <Input 
+                    placeholder="Nhập địa điểm tổ chức" 
+                    className="rounded-lg"
+                    size="large"
+                  />
+                </Form.Item>
 
-            <Form.Item
-              name="description"
-              label={<span className="text-sm font-medium text-gray-700">Mô tả</span>}
-              rules={[
-                { required: true, message: 'Vui lòng nhập mô tả!' }
-              ]}
-            >
-              <TextArea
-                placeholder="Nhập mô tả sự kiện"
-                rows={4}
-                className="rounded-lg border-gray-300 hover:border-blue-400 focus:border-blue-500"
-              />
-            </Form.Item>
+                <Form.Item
+                  name="description"
+                  label={<span className="text-sm font-medium text-gray-700">Mô tả</span>}
+                  rules={[
+                    { required: true, message: 'Vui lòng nhập mô tả!' }
+                  ]}
+                  className="mb-3"
+                >
+                  <TextArea 
+                    placeholder="Nhập mô tả sự kiện"
+                    rows={3}
+                    className="rounded-lg"
+                  />
+                </Form.Item>
 
-            <Form.Item
-              name="is_big_event"
-              label={<span className="text-sm font-medium text-gray-700">Sự kiện lớn</span>}
-              valuePropName="checked"
-            >
-              <Switch
-                checkedChildren="Có"
-                unCheckedChildren="Không"
-                className="bg-gray-300"
-              />
-            </Form.Item>
+                <Form.Item
+                  name="is_big_event"
+                  label={<span className="text-sm font-medium text-gray-700">Sự kiện lớn</span>}
+                  valuePropName="checked"
+                  className="mb-3"
+                >
+                  <Switch 
+                    checkedChildren="Có" 
+                    unCheckedChildren="Không"
+                  />
+                </Form.Item>
 
-            <Form.Item
-              label={<span className="text-sm font-medium text-gray-700">Quản lý Media</span>}
-              tooltip="Upload và quản lý hình ảnh, video cho sự kiện"
-            >
+                <Form.Item className="mb-0 pt-3 border-t border-gray-100">
+                  <div className="flex justify-end space-x-3">
+                    <Button 
+                      onClick={() => {
+                        setIsModalOpen(false);
+                        setEditingEvent(null);
+                        setMediaList([]);
+                        form.resetFields();
+                      }}
+                      className="rounded-lg"
+                      size="large"
+                    >
+                      Hủy
+                    </Button>
+                    <Button 
+                      type="primary" 
+                      htmlType="submit"
+                      loading={createMutation.isPending || updateMutation.isPending}
+                      className="rounded-lg"
+                      size="large"
+                    >
+                      {editingEvent ? 'Cập nhật' : 'Tạo'}
+                    </Button>
+                  </div>
+                </Form.Item>
+              </Form>
+            </Card>
+          </div>
+
+          {/* Right Column - Media Management */}
+          <div>
+            <Card title="Quản lý Media" size="small" className="h-fit">
               <MediaManager
                 fileList={mediaList}
                 onChange={setMediaList}
                 onUpload={(file) => {
-                  // Handle individual file upload if needed
                   message.info(`Đã thêm ${file.name}`);
                 }}
                 maxImageFiles={12}
                 maxVideoFiles={12}
                 accept="image/*,video/*,.pdf,.doc,.docx"
               />
-            </Form.Item>
-
-            <Form.Item className="mb-0 pt-4 border-t border-gray-100">
-              <div className="flex justify-end space-x-3">
-                <Button
-                  onClick={() => {
-                    setIsModalOpen(false);
-                    setEditingEvent(null);
-                    setMediaList([]);
-                    form.resetFields();
-                  }}
-                  className="rounded-lg border-gray-300 hover:border-gray-400"
-                  size="large"
-                >
-                  Hủy
-                </Button>
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  loading={createMutation.isPending || updateMutation.isPending}
-                  className="rounded-lg bg-blue-500 hover:bg-blue-600 border-blue-500 hover:border-blue-600"
-                  size="large"
-                >
-                  {editingEvent ? 'Cập nhật' : 'Tạo'}
-                </Button>
-              </div>
-            </Form.Item>
+            </Card>
           </div>
-        </Form>
+        </div>
       </Modal>
     </AntAdminLayout>
   );
