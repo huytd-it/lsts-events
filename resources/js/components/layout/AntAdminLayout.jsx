@@ -43,6 +43,11 @@ const AntAdminLayout = ({ children }) => {
       label: <Link to="/categories">Danh mục</Link>,
     },
     {
+      key: '/users',
+      icon: <UserOutlined />,
+      label: <Link to="/users">Người dùng</Link>,
+    },
+    {
       key: '/settings',
       icon: <SettingOutlined />,
       label: <Link to="/settings">Cài đặt</Link>,

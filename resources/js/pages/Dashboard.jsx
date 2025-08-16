@@ -1,38 +1,39 @@
 import React from 'react';
-import { Row, Col, Card, Statistic, List, Avatar } from 'antd';
+import { Row, Col, Card, Statistic, List, Avatar, Spin } from 'antd';
 import { UserOutlined, CalendarOutlined, FolderOutlined, CheckCircleOutlined } from '@ant-design/icons';
+import { useQuery } from '@tanstack/react-query';
+import { mockDashboardService } from '../api/services/mockApiService';
 import AntAdminLayout from '../components/layout/AntAdminLayout';
 
 const Dashboard = () => {
-  const eventsData = [
-    {
-      title: 'Hội thảo công nghệ 2023',
-      description: '15 Oct 2023 · Hà Nội',
-    },
-    {
-      title: 'Triển lãm nghệ thuật đương đại',
-      description: '22 Nov 2023 · Hồ Chí Minh',
-    },
-    {
-      title: 'Buổi biểu diễn nhạc cổ điển',
-      description: '05 Dec 2023 · Đà Nẵng',
-    },
-  ];
+  // Fetch dashboard statistics
+  const { data: statsResponse, isLoading, error } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: () => mockDashboardService.getStats(),
+    retry: 2,
+  });
 
-  const usersData = [
-    {
-      name: 'Nguyễn Văn A',
-      email: 'nguyenvana@example.com',
-    },
-    {
-      name: 'Trần Thị B',
-      email: 'tranthib@example.com',
-    },
-    {
-      name: 'Lê Văn C',
-      email: 'levanc@example.com',
-    },
-  ];
+  const stats = statsResponse?.data;
+
+  if (isLoading) {
+    return (
+      <AntAdminLayout>
+        <div className="flex justify-center items-center py-8">
+          <Spin size="large" />
+        </div>
+      </AntAdminLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <AntAdminLayout>
+        <div className="text-center py-8">
+          <p className="text-red-500">Có lỗi xảy ra khi tải dữ liệu: {error.message}</p>
+        </div>
+      </AntAdminLayout>
+    );
+  }
 
   return (
     <AntAdminLayout>
@@ -46,7 +47,7 @@ const Dashboard = () => {
           <Card>
             <Statistic
               title="Người dùng"
-              value={120}
+              value={stats?.totalUsers || 0}
               prefix={<UserOutlined />}
               valueStyle={{ color: '#1b4664' }}
             />
@@ -56,7 +57,7 @@ const Dashboard = () => {
           <Card>
             <Statistic
               title="Sự kiện"
-              value={42}
+              value={stats?.totalEvents || 0}
               prefix={<CalendarOutlined />}
               valueStyle={{ color: '#1b4664' }}
             />
@@ -66,7 +67,7 @@ const Dashboard = () => {
           <Card>
             <Statistic
               title="Danh mục"
-              value={8}
+              value={stats?.totalCategories || 0}
               prefix={<FolderOutlined />}
               valueStyle={{ color: '#1b4664' }}
             />
@@ -76,7 +77,7 @@ const Dashboard = () => {
           <Card>
             <Statistic
               title="Đăng ký"
-              value={256}
+              value={stats?.totalRegistrations || 0}
               prefix={<CheckCircleOutlined />}
               valueStyle={{ color: '#1b4664' }}
             />
@@ -89,13 +90,13 @@ const Dashboard = () => {
           <Card title="Sự kiện gần đây" size="small">
             <List
               itemLayout="horizontal"
-              dataSource={eventsData}
+              dataSource={stats?.recentEvents || []}
               renderItem={(item, index) => (
                 <List.Item>
                   <List.Item.Meta
                     avatar={<Avatar src={`https://api.dicebear.com/7.x/miniavs/svg?seed=${index}`} />}
-                    title={item.title}
-                    description={item.description}
+                    title={item.event_name}
+                    description={`${item.event_date} · ${item.location}`}
                   />
                 </List.Item>
               )}
@@ -106,7 +107,7 @@ const Dashboard = () => {
           <Card title="Người dùng mới" size="small">
             <List
               itemLayout="horizontal"
-              dataSource={usersData}
+              dataSource={stats?.recentUsers || []}
               renderItem={(item) => (
                 <List.Item>
                   <List.Item.Meta
