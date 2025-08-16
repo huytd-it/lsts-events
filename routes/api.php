@@ -64,6 +64,17 @@ Route::middleware('auth:sanctum')->group(function () {
     });
     Route::apiResource('events', EventController::class);
 
+    // File Manager API - Real file system operations
+    Route::prefix('file-manager')->group(function () {
+        Route::get('tree', [App\Http\Controllers\Api\FileManagerController::class, 'getDirectoryTree']);
+        Route::get('contents', [App\Http\Controllers\Api\FileManagerController::class, 'getDirectoryContents']);
+        Route::post('upload', [App\Http\Controllers\Api\FileManagerController::class, 'uploadFiles']);
+        Route::post('folder', [App\Http\Controllers\Api\FileManagerController::class, 'createFolder']);
+        Route::delete('delete', [App\Http\Controllers\Api\FileManagerController::class, 'delete']);
+        Route::put('rename', [App\Http\Controllers\Api\FileManagerController::class, 'rename']);
+        Route::get('info', [App\Http\Controllers\Api\FileManagerController::class, 'getFileInfo']);
+    });
+
     // Event Media API - Commented out until EventMediaController is created
     // Route::prefix('event-media')->group(function () {
     //     Route::get('slides', [EventMediaController::class, 'getSlides']);

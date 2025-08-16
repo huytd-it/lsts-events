@@ -97,6 +97,7 @@ const MediaManager = ({
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [serverFiles, setServerFiles] = useState([]);
   const [selectedServerFiles, setSelectedServerFiles] = useState([]);
+  const [pendingFiles, setPendingFiles] = useState([]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -121,8 +122,8 @@ const MediaManager = ({
     return true;
   };
 
-  // Handle file upload
-  const handleUpload = (file) => {
+  // Handle single file addition
+  const handleSingleFileAdd = (file) => {
     const newFile = {
       uid: file.uid,
       name: file.name,
@@ -138,7 +139,7 @@ const MediaManager = ({
     const newFileList = [...fileList, newFile];
     
     if (!validateFileLimits(newFileList)) {
-      return false;
+      return;
     }
 
     if (onChange) {
@@ -149,7 +150,39 @@ const MediaManager = ({
       onUpload(file);
     }
 
-    return false; // Prevent auto upload
+    message.success(`Đã thêm ${file.name}`);
+  };
+
+  // Handle multiple files addition
+  const handleMultipleFileAdd = (files) => {
+    const processedFiles = files.map((file, index) => ({
+      uid: file.uid || `upload-${Date.now()}-${index}`,
+      name: file.name,
+      file_name: file.name,
+      size: file.size,
+      type: file.type,
+      file_path: '', // Will be set after upload
+      is_show: 1,
+      order: fileList.length + index,
+      originFileObj: file
+    }));
+
+    const newFileList = [...fileList, ...processedFiles];
+    
+    if (!validateFileLimits(newFileList)) {
+      return;
+    }
+
+    if (onChange) {
+      onChange(newFileList);
+    }
+
+    // Call onUpload for each file if provided
+    if (onUpload) {
+      processedFiles.forEach(file => onUpload(file.originFileObj));
+    }
+
+    message.success(`Đã thêm ${processedFiles.length} file(s)`);
   };
 
   // Handle file removal
@@ -397,7 +430,15 @@ const MediaManager = ({
             children: (
               <Upload.Dragger
                 multiple
-                beforeUpload={handleUpload}
+                beforeUpload={(file, fileList) => {
+                  // Process all files at once when multiple files are selected
+                  if (fileList.length > 1) {
+                    handleMultipleFileAdd(fileList);
+                  } else {
+                    handleSingleFileAdd(file);
+                  }
+                  return false; // Prevent auto upload
+                }}
                 showUploadList={false}
                 accept={accept}
                 style={{ marginBottom: 16 }}

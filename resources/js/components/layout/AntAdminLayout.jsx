@@ -1,27 +1,26 @@
 import React, { useState } from 'react';
-import { Layout, Menu, Button, Avatar, Dropdown, Space, theme, Badge } from 'antd';
+import { Layout, Menu, Button, Avatar, Dropdown, Space, Badge, theme } from 'antd';
 import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
+  UploadOutlined,
+  UserOutlined,
+  VideoCameraOutlined,
   BellOutlined,
   SearchOutlined,
   DashboardOutlined,
   CalendarOutlined,
   FolderOutlined,
   SettingOutlined,
-  LogoutOutlined,
-  UserOutlined,
-  FileOutlined
+  LogoutOutlined
 } from '@ant-design/icons';
 import { Link, useLocation } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
 
 const { Header, Sider, Content } = Layout;
 
 const AntAdminLayout = ({ children }) => {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
-  const { user, logout } = useAuth();
   
   const {
     token: { colorBgContainer, borderRadiusLG },
@@ -49,24 +48,11 @@ const AntAdminLayout = ({ children }) => {
       label: <Link to="/users">Người dùng</Link>,
     },
     {
-      key: '/files',
-      icon: <FileOutlined />,
-      label: <Link to="/files">File Explorer</Link>,
-    },
-    {
       key: '/settings',
       icon: <SettingOutlined />,
       label: <Link to="/settings">Cài đặt</Link>,
     },
   ];
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
 
   const userMenuItems = [
     {
@@ -78,7 +64,6 @@ const AntAdminLayout = ({ children }) => {
       key: 'logout',
       label: 'Đăng xuất',
       icon: <LogoutOutlined />,
-      onClick: handleLogout,
     },
   ];
 
@@ -94,11 +79,9 @@ const AntAdminLayout = ({ children }) => {
         <div className="demo-logo-vertical">
           <div className="p-4">
             <div className="flex items-center gap-2">
-              <div className="bg-primary w-8 h-8 rounded-full flex items-center justify-center">
-                <CalendarOutlined style={{ color: 'white' }} />
-              </div>
+              <div className="bg-blue-600 w-8 h-8 rounded-full"></div>
               {!collapsed && (
-                <span className="text-xl font-bold text-secondary">LSTS Events</span>
+                <span className="text-xl font-bold text-blue-600">LSTS Admin</span>
               )}
             </div>
           </div>
@@ -107,6 +90,7 @@ const AntAdminLayout = ({ children }) => {
           mode="inline"
           selectedKeys={[location.pathname]}
           items={menuItems}
+          theme="light"
         />
       </Sider>
       
@@ -138,31 +122,24 @@ const AntAdminLayout = ({ children }) => {
                 <input
                   type="text"
                   placeholder="Tìm kiếm..."
-                  className="py-2 px-4 pr-10 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                  className="py-2 px-4 pr-10 rounded-full border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <SearchOutlined className="absolute right-3 top-2.5 text-gray-400" />
               </div>
             </div>
             
             <Badge count={5}>
-              <BellOutlined className="text-xl cursor-pointer" />
+              <BellOutlined className="text-xl" />
             </Badge>
             
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-              <div className="flex items-center gap-2 cursor-pointer">
-                <Avatar 
-                  style={{ 
-                    backgroundColor: '#1890ff', 
-                    color: 'white'
-                  }} 
-                  icon={<UserOutlined />} 
-                />
-                {user && (
-                  <span className="hidden md:block text-sm font-medium">
-                    {user.name || user.email}
-                  </span>
-                )}
-              </div>
+              <Avatar 
+                style={{ 
+                  backgroundColor: '#1890ff', 
+                  cursor: 'pointer'
+                }} 
+                icon={<UserOutlined />} 
+              />
             </Dropdown>
           </div>
         </Header>
